@@ -5,6 +5,10 @@ from mcp_anything.analysis.ast_analyzer import (
     ast_results_to_capabilities,
 )
 from mcp_anything.analysis.detectors import ALL_DETECTORS
+from mcp_anything.analysis.flask_fastapi_analyzer import (
+    analyze_flask_fastapi_file,
+    flask_fastapi_results_to_capabilities,
+)
 from mcp_anything.analysis.java_analyzer import (
     analyze_java_file,
     java_results_to_capabilities,
@@ -92,7 +96,23 @@ class AnalyzePhase(Phase):
                 f"{controller_count} controllers"
             )
 
-        # 3b. For non-Python or thin codebases, try --help parsing
+        # 3b. Flask/FastAPI analysis
+        flask_fastapi_results = {}
+        for fi in files:
+            if fi.language == Language.PYTHON:
+                ff_result = analyze_flask_fastapi_file(root, fi)
+                if ff_result and ff_result.routes:
+                    flask_fastapi_results[fi.path] = ff_result
+                    fi.is_api_surface = True
+
+        if flask_fastapi_results:
+            route_count = sum(len(r.routes) for r in flask_fastapi_results.values())
+            frameworks = {r.framework for r in flask_fastapi_results.values()}
+            console.print(
+                f"    {'/'.join(frameworks).title()}: {route_count} HTTP routes"
+            )
+
+        # 3c. For non-Python or thin codebases, try --help parsing
         ast_cap_count = sum(
             len(r.functions) + len(r.cli_commands) for r in ast_results.values()
         )
@@ -129,7 +149,7 @@ class AnalyzePhase(Phase):
         else:
             result = self._ast_fallback(
                 ctx.manifest.server_name, files, all_mechanisms, ast_results,
-                java_results,
+                java_results, flask_fastapi_results,
             )
 
         # Override backend if forced
@@ -148,21 +168,34 @@ class AnalyzePhase(Phase):
     def _ast_fallback(
         self, app_name: str, files: list, ipc_mechanisms: list, ast_results: dict,
         java_results: dict | None = None,
+        flask_fastapi_results: dict | None = None,
     ) -> AnalysisResult:
-        """Generate AnalysisResult from AST/Java analysis without LLM."""
+        """Generate AnalysisResult from AST/Java/Flask/FastAPI analysis without LLM."""
         primary_ipc = None
         if ipc_mechanisms:
             primary_ipc = max(ipc_mechanisms, key=lambda m: m.confidence).ipc_type
 
         languages = list({f.language for f in files if f.language != Language.OTHER})
 
+        # When Flask/FastAPI routes are found, exclude those files from AST
+        # to avoid duplicate generic function tools alongside HTTP route tools
+        if flask_fastapi_results:
+            filtered_ast = {k: v for k, v in ast_results.items() if k not in flask_fastapi_results}
+        else:
+            filtered_ast = ast_results
+
         # Generate capabilities from AST results
-        capabilities = ast_results_to_capabilities(ast_results, primary_ipc)
+        capabilities = ast_results_to_capabilities(filtered_ast, primary_ipc)
 
         # Add Java/Spring Boot capabilities
         if java_results:
             java_caps = java_results_to_capabilities(java_results)
             capabilities.extend(java_caps)
+
+        # Add Flask/FastAPI capabilities
+        if flask_fastapi_results:
+            ff_caps = flask_fastapi_results_to_capabilities(flask_fastapi_results)
+            capabilities.extend(ff_caps)
 
         # If AST found nothing, fall back to generic capability
         if not capabilities:

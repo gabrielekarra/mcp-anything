@@ -21,8 +21,7 @@ PROTOCOL_PATTERNS = [
     (r"mqtt", "MQTT", 0.7),
     (r"paho\.mqtt", "Paho MQTT", 0.9),
     (r"import\s+redis", "Redis import", 0.7),
-    (r"Flask\s*\(|FastAPI\s*\(|app\s*=\s*Sanic\s*\(", "HTTP framework", 0.8),
-    (r"@app\.(route|get|post|put|delete)", "HTTP route decorator", 0.85),
+    (r"app\s*=\s*Sanic\s*\(", "Sanic HTTP framework", 0.8),
 ]
 
 

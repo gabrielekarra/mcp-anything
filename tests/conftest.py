@@ -21,5 +21,15 @@ def fake_spring_app(fixtures_dir) -> Path:
 
 
 @pytest.fixture
+def fake_fastapi_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_fastapi_app"
+
+
+@pytest.fixture
+def fake_flask_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_flask_app"
+
+
+@pytest.fixture
 def tmp_output(tmp_path) -> Path:
     return tmp_path / "output"
