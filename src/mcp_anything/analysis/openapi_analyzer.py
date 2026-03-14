@@ -408,6 +408,47 @@ def openapi_to_capabilities(
     return capabilities
 
 
+def extract_security_schemes(spec: dict) -> list[dict[str, str]]:
+    """Extract security scheme info from an OpenAPI spec.
+
+    Returns a list of dicts with keys: type, scheme, name, location.
+    """
+    schemes = []
+
+    # OpenAPI 3.x: components.securitySchemes
+    security_schemes = spec.get("components", {}).get("securitySchemes", {})
+    # Swagger 2.x: securityDefinitions
+    if not security_schemes:
+        security_schemes = spec.get("securityDefinitions", {})
+
+    for scheme_name, scheme in security_schemes.items():
+        if not isinstance(scheme, dict):
+            continue
+        entry: dict[str, str] = {"name": scheme_name}
+        scheme_type = scheme.get("type", "")
+
+        if scheme_type == "apiKey":
+            entry["type"] = "api_key"
+            entry["header"] = scheme.get("name", "")
+            entry["location"] = scheme.get("in", "header")  # "header" or "query"
+        elif scheme_type == "http":
+            http_scheme = scheme.get("scheme", "").lower()
+            if http_scheme == "bearer":
+                entry["type"] = "bearer"
+            elif http_scheme == "basic":
+                entry["type"] = "basic"
+            else:
+                entry["type"] = http_scheme
+        elif scheme_type == "oauth2":
+            entry["type"] = "bearer"  # OAuth2 tokens are sent as Bearer
+        else:
+            continue
+
+        schemes.append(entry)
+
+    return schemes
+
+
 def extract_server_info(spec: dict) -> dict[str, str]:
     """Extract server host/port info from an OpenAPI spec."""
     info: dict[str, str] = {"protocol": "http"}

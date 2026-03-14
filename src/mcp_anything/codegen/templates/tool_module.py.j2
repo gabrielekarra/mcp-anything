@@ -1,6 +1,13 @@
 """{{ module_name }} tools for {{ design.server_name }}."""
 
+import json
+
 from mcp.server.fastmcp import FastMCP
+{% set has_http_tools = tools | selectattr('impl.strategy', 'equalto', 'http_call') | list | length > 0 %}
+{% if has_http_tools %}
+
+from {{ package_name }}.backend import BackendError
+{% endif %}
 
 
 def register_tools(server: FastMCP{% if design.backend %}, backend{% endif %}) -> None:
@@ -18,7 +25,32 @@ def register_tools(server: FastMCP{% if design.backend %}, backend{% endif %}) -
     {% endfor %}
     ) -> str:
         """{{ tool.description | safe_docstring }}"""
-    {% if tool.impl.strategy == "cli_subcommand" %}
+    {% if tool.impl.strategy == "http_call" %}
+        # HTTP {{ tool.impl.http_method }} {{ tool.impl.http_path }}
+        path_params: dict[str, str] = {}
+        query_params: dict[str, str] = {}
+        body: dict | None = None
+        {% for param in tool.parameters %}
+        {% if tool.impl.arg_mapping.get(param.name, {}).get("style") == "path" %}
+        path_params["{{ param.name }}"] = str({{ param.name }})
+        {% elif tool.impl.arg_mapping.get(param.name, {}).get("style") == "body" %}
+        body = {{ param.name }} if isinstance({{ param.name }}, dict) else {"data": {{ param.name }}}
+        {% else %}
+        if {{ param.name }} is not None:
+            query_params["{{ param.name }}"] = str({{ param.name }})
+        {% endif %}
+        {% endfor %}
+        try:
+            return await backend.request(
+                "{{ tool.impl.http_method }}",
+                "{{ tool.impl.http_path }}",
+                params=query_params or None,
+                body=body,
+                path_params=path_params or None,
+            )
+        except BackendError as exc:
+            return json.dumps(exc.to_dict(), indent=2)
+    {% elif tool.impl.strategy == "cli_subcommand" %}
         # Run CLI subcommand: {{ tool.impl.cli_subcommand }}
         cmd_args: list[str] = []
         {% for param in tool.parameters %}
@@ -42,28 +74,6 @@ def register_tools(server: FastMCP{% if design.backend %}, backend{% endif %}) -
         {% for param in tool.parameters %}
             {{ param.name }}={{ param.name }},
         {% endfor %}
-        )
-    {% elif tool.impl.strategy == "http_call" %}
-        # HTTP {{ tool.impl.http_method }} {{ tool.impl.http_path }}
-        path_params: dict[str, str] = {}
-        query_params: dict[str, str] = {}
-        body: dict | None = None
-        {% for param in tool.parameters %}
-        {% if tool.impl.arg_mapping.get(param.name, {}).get("style") == "path" %}
-        path_params["{{ param.name }}"] = str({{ param.name }})
-        {% elif tool.impl.arg_mapping.get(param.name, {}).get("style") == "body" %}
-        body = {{ param.name }} if isinstance({{ param.name }}, dict) else {"data": {{ param.name }}}
-        {% else %}
-        if {{ param.name }} is not None:
-            query_params["{{ param.name }}"] = str({{ param.name }})
-        {% endif %}
-        {% endfor %}
-        return await backend.request(
-            "{{ tool.impl.http_method }}",
-            "{{ tool.impl.http_path }}",
-            params=query_params or None,
-            body=body,
-            path_params=path_params or None,
         )
     {% elif tool.impl.strategy == "python_call" %}
         # Direct Python call: {{ tool.impl.python_module }}.{{ tool.impl.python_function }}

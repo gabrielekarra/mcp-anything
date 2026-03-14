@@ -6,6 +6,7 @@ import pytest
 
 from mcp_anything.analysis.detectors.openapi_detector import OpenAPIDetector
 from mcp_anything.analysis.openapi_analyzer import (
+    extract_security_schemes,
     find_openapi_specs,
     openapi_to_capabilities,
     parse_openapi_spec,
@@ -223,3 +224,130 @@ class TestSwagger2Capabilities:
         info = extract_server_info(swagger_spec)
         assert info["base_url"] == "http://localhost:9090/api"
         assert info["port"] == "9090"
+
+
+# ── Security Scheme Extraction ──
+
+
+class TestSecuritySchemes:
+    def test_extracts_api_key_header(self):
+        spec = {
+            "openapi": "3.0.0",
+            "components": {
+                "securitySchemes": {
+                    "apiKey": {
+                        "type": "apiKey",
+                        "name": "X-API-Key",
+                        "in": "header",
+                    }
+                }
+            },
+        }
+        schemes = extract_security_schemes(spec)
+        assert len(schemes) == 1
+        assert schemes[0]["type"] == "api_key"
+        assert schemes[0]["header"] == "X-API-Key"
+        assert schemes[0]["location"] == "header"
+
+    def test_extracts_api_key_query(self):
+        spec = {
+            "openapi": "3.0.0",
+            "components": {
+                "securitySchemes": {
+                    "apiKey": {
+                        "type": "apiKey",
+                        "name": "api_key",
+                        "in": "query",
+                    }
+                }
+            },
+        }
+        schemes = extract_security_schemes(spec)
+        assert len(schemes) == 1
+        assert schemes[0]["type"] == "api_key"
+        assert schemes[0]["location"] == "query"
+
+    def test_extracts_bearer_token(self):
+        spec = {
+            "openapi": "3.0.0",
+            "components": {
+                "securitySchemes": {
+                    "bearerAuth": {
+                        "type": "http",
+                        "scheme": "bearer",
+                    }
+                }
+            },
+        }
+        schemes = extract_security_schemes(spec)
+        assert len(schemes) == 1
+        assert schemes[0]["type"] == "bearer"
+
+    def test_extracts_basic_auth(self):
+        spec = {
+            "openapi": "3.0.0",
+            "components": {
+                "securitySchemes": {
+                    "basicAuth": {
+                        "type": "http",
+                        "scheme": "basic",
+                    }
+                }
+            },
+        }
+        schemes = extract_security_schemes(spec)
+        assert len(schemes) == 1
+        assert schemes[0]["type"] == "basic"
+
+    def test_extracts_oauth2_as_bearer(self):
+        spec = {
+            "openapi": "3.0.0",
+            "components": {
+                "securitySchemes": {
+                    "oauth2": {
+                        "type": "oauth2",
+                        "flows": {"clientCredentials": {"tokenUrl": "/token"}},
+                    }
+                }
+            },
+        }
+        schemes = extract_security_schemes(spec)
+        assert len(schemes) == 1
+        assert schemes[0]["type"] == "bearer"
+
+    def test_swagger2_security_definitions(self):
+        spec = {
+            "swagger": "2.0",
+            "securityDefinitions": {
+                "api_key": {
+                    "type": "apiKey",
+                    "name": "Authorization",
+                    "in": "header",
+                }
+            },
+        }
+        schemes = extract_security_schemes(spec)
+        assert len(schemes) == 1
+        assert schemes[0]["type"] == "api_key"
+        assert schemes[0]["header"] == "Authorization"
+
+    def test_no_security_schemes(self):
+        spec = {"openapi": "3.0.0", "paths": {}}
+        schemes = extract_security_schemes(spec)
+        assert schemes == []
+
+    def test_multiple_schemes(self):
+        spec = {
+            "openapi": "3.0.0",
+            "components": {
+                "securitySchemes": {
+                    "bearerAuth": {"type": "http", "scheme": "bearer"},
+                    "apiKey": {"type": "apiKey", "name": "X-Key", "in": "header"},
+                }
+            },
+        }
+        schemes = extract_security_schemes(spec)
+        assert len(schemes) == 2
+        types = {s["type"] for s in schemes}
+        assert "bearer" in types
+        assert "api_key" in types

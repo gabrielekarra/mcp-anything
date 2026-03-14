@@ -50,6 +50,22 @@ class ResourceSpec(BaseModel):
     resource_type: str = "generic"  # "status", "commands", "config", "generic"
 
 
+class AuthConfig(BaseModel):
+    """Authentication configuration for HTTP backends.
+
+    All secrets are read from environment variables at runtime.
+    """
+
+    auth_type: str = ""  # "api_key", "bearer", "basic", or ""
+    # For api_key: where to send the key
+    api_key_header: str = ""  # e.g. "X-API-Key", "Authorization"
+    api_key_query: str = ""   # e.g. "api_key" (query param name)
+    # Env var names for secrets (values read at runtime, never stored)
+    env_var_token: str = ""   # env var holding the token/key
+    env_var_username: str = ""  # env var for basic auth username
+    env_var_password: str = ""  # env var for basic auth password
+
+
 class BackendConfig(BaseModel):
     """Configuration for the communication backend."""
 
@@ -61,6 +77,7 @@ class BackendConfig(BaseModel):
     command_args: list[str] = Field(default_factory=list)
     env_vars: dict[str, str] = Field(default_factory=dict)
     codebase_path: str = ""  # absolute path to the target app
+    auth: AuthConfig = Field(default_factory=AuthConfig)
 
 
 class ServerDesign(BaseModel):

@@ -59,6 +59,14 @@ Current version: **0.1.0**
 
 ---
 
+### v0.2.0 — Authentication & Reliability
+- [x] **HTTP authentication support** — API keys (header/query), Bearer tokens, Basic auth, OAuth2 client credentials
+- [x] **Environment variable configuration** — secrets via env vars (`<APP>_TOKEN`, `<APP>_API_KEY`, `<APP>_USERNAME`/`<APP>_PASSWORD`), never hardcoded
+- [x] **Error handling improvements** — retry with exponential backoff on 429/5xx, configurable timeout (`<APP>_TIMEOUT`), structured `BackendError` with status code/method/path/response
+- [x] **Base URL configuration** — configurable via `<APP>_BASE_URL` env var, auto-extracted from OpenAPI servers/host
+
+---
+
 ## In Progress
 
 _Nothing currently in progress._
@@ -66,13 +74,6 @@ _Nothing currently in progress._
 ---
 
 ## Planned
-
-### v0.2.0 — Authentication & Reliability
-
-- [ ] **HTTP authentication support** — API keys (header/query), Bearer tokens, Basic auth, OAuth2 client credentials
-- [ ] **Environment variable configuration** — secrets via env vars, not hardcoded
-- [ ] **Error handling improvements** — retry logic, timeout configuration, structured error responses
-- [ ] **Base URL configuration** — configurable target host/port via env vars or CLI flags
 
 ### v0.3.0 — More Languages & Frameworks
 

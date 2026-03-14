@@ -5,7 +5,7 @@ import re
 from typing import Optional
 
 from mcp_anything.models.analysis import AnalysisResult, Capability, IPCType, ParameterSpec
-from mcp_anything.models.design import BackendConfig, ResourceSpec, ServerDesign, ToolImpl, ToolSpec
+from mcp_anything.models.design import AuthConfig, BackendConfig, ResourceSpec, ServerDesign, ToolImpl, ToolSpec
 from mcp_anything.pipeline.context import PipelineContext
 from mcp_anything.pipeline.phase import Phase
 
@@ -125,6 +125,70 @@ def _group_tools(tools: list[ToolSpec]) -> dict[str, list[str]]:
     return modules
 
 
+def _build_auth_config(analysis: AnalysisResult, codebase_path: str = "") -> AuthConfig:
+    """Build auth configuration from OpenAPI security schemes or IPC mechanism details."""
+    from pathlib import Path
+    from mcp_anything.analysis.openapi_analyzer import extract_security_schemes, parse_openapi_spec
+
+    app_name = _to_snake_case(analysis.app_name).upper()
+
+    # Try to re-parse the OpenAPI spec to extract security schemes
+    spec_file = None
+    for mech in analysis.ipc_mechanisms:
+        if mech.details.get("spec_file"):
+            spec_file = mech.details["spec_file"]
+            break
+
+    if spec_file and codebase_path:
+        spec_path = Path(codebase_path) / spec_file
+        if spec_path.is_file():
+            spec = parse_openapi_spec(spec_path)
+            if spec:
+                schemes = extract_security_schemes(spec)
+                if schemes:
+                    scheme = schemes[0]  # Use first security scheme
+                    auth_type = scheme.get("type", "")
+
+                    if auth_type == "api_key":
+                        location = scheme.get("location", "header")
+                        header_name = scheme.get("header", "")
+                        return AuthConfig(
+                            auth_type="api_key",
+                            api_key_header=header_name if location == "header" else "",
+                            api_key_query=header_name if location == "query" else "",
+                            env_var_token=f"{app_name}_API_KEY",
+                        )
+                    elif auth_type == "bearer":
+                        return AuthConfig(
+                            auth_type="bearer",
+                            env_var_token=f"{app_name}_TOKEN",
+                        )
+                    elif auth_type == "basic":
+                        return AuthConfig(
+                            auth_type="basic",
+                            env_var_username=f"{app_name}_USERNAME",
+                            env_var_password=f"{app_name}_PASSWORD",
+                        )
+
+    # Check IPC mechanism details for auth hints
+    for mech in analysis.ipc_mechanisms:
+        if mech.details.get("auth_type"):
+            auth_type = mech.details["auth_type"]
+            if auth_type == "api_key":
+                return AuthConfig(
+                    auth_type="api_key",
+                    api_key_header=mech.details.get("auth_header", "X-API-Key"),
+                    env_var_token=f"{app_name}_API_KEY",
+                )
+            elif auth_type == "bearer":
+                return AuthConfig(
+                    auth_type="bearer",
+                    env_var_token=f"{app_name}_TOKEN",
+                )
+
+    return AuthConfig()
+
+
 def _build_backend_config(analysis: AnalysisResult, codebase_path: str = "") -> Optional[BackendConfig]:
     """Create backend configuration from analysis results."""
     ipc_type = analysis.primary_ipc
@@ -154,6 +218,11 @@ def _build_backend_config(analysis: AnalysisResult, codebase_path: str = "") -> 
             if "framework" in mech.details:
                 config.env_vars["FRAMEWORK"] = mech.details["framework"]
             break
+
+    # Build auth config for HTTP backends
+    auth = _build_auth_config(analysis, codebase_path)
+    if auth.auth_type:
+        config.auth = auth
 
     return config
 
