@@ -6,164 +6,143 @@
 
 ![mcp-anything demo](promo.gif)
 
-Generate an MCP server from any codebase in one command.
+**Turn any codebase into an MCP server. One command.**
 
 ```bash
 mcp-anything generate /path/to/app
 ```
 
-`mcp-anything` scans a project's source code, detects how it works (CLI, Python API, sockets, protocols, file I/O), and generates a fully functional MCP server package — ready to install and use with Claude Code or any MCP client.
+Point it at any project — Python, Go, Java, Rust, Ruby, TypeScript — and get a production-ready MCP server package. No manual wrapping. No boilerplate.
 
-## Install
+## Why
+
+MCP is becoming the standard protocol for connecting AI agents to tools. But wrapping existing software into MCP servers is tedious, repetitive work.
+
+`mcp-anything` automates the entire process: it analyzes your code, extracts every endpoint and command, and generates a fully typed, tested, documented MCP server — with support for the latest MCP features like streamable HTTP transport, server-delivered prompts, and agent-discoverable tool indexes.
+
+## Quick Start
 
 ```bash
 git clone https://github.com/gabrielekarra/mcp-anything.git
 cd mcp-anything
 pip install -e ".[dev,llm]"
+
+# Generate a server
+mcp-anything generate /path/to/your/app
 ```
 
-The `[llm]` extra adds the Anthropic SDK for LLM-enhanced analysis and tool descriptions. Set `ANTHROPIC_API_KEY` to enable it, or use `--no-llm` for fully static analysis.
-
-## Usage
-
-Generate a full MCP server from any project:
-
-```bash
-mcp-anything generate /path/to/app
-```
-
-This runs the 6-phase pipeline (analyze, design, implement, test, document, package) and outputs a pip-installable server package.
-
-### Options
-
-```
---name NAME          Override server name (default: directory name)
--o, --output-dir DIR Output directory (default: ./mcp-<name>-server)
---backend TYPE       Force backend: cli, socket, file, python-api, protocol
---transport TYPE     MCP transport: stdio (default) or http (enterprise/remote)
---no-llm             Skip LLM analysis, use static detection only
---no-install         Skip auto-installing dependencies
---phases PHASES      Run specific phases (e.g. analyze,design)
---resume             Resume from saved manifest
-```
-
-### HTTP Transport (Enterprise)
-
-Generate a remote MCP server with streamable HTTP, OpenTelemetry, Docker, and AGENTS.md:
-
-```bash
-mcp-anything generate /path/to/app --transport http
-```
-
-This produces a server that runs over HTTP instead of stdio, with:
-- Streamable HTTP/SSE transport for remote access
-- OpenTelemetry instrumentation for tool usage metrics
-- Dockerfile for container deployment
-- AGENTS.md for coding agent discoverability
-- MCP Prompts (server-delivered skills)
-- Dynamic documentation resources
-
-### Other commands
-
-```bash
-mcp-anything analyze /path/to/app     # Run analysis only
-mcp-anything design /path/to/app      # Run analysis + design
-mcp-anything status ./mcp-myapp-server # Check generation status
-mcp-anything serve ./mcp-myapp-server  # Run server without installing
-```
-
-## What It Does
-
-### Analysis
-
-- **AST analysis** of Python source code — extracts functions, parameters, types, defaults, docstrings
-- **Click/Typer support** — extracts rich parameter info from `@click.option()`, `@click.argument()`, `typer.Option()`, `typer.Argument()`
-- **Argparse detection** — finds subcommands via `add_parser()` calls
-- **FastAPI/Flask** — route extraction, `Query()`/`Path()`/`Body()` params, `Depends()` filtering, APIRouter prefixes
-- **Django REST Framework** — ViewSets, serializers, `@action` custom actions, `urls.py` pattern parsing
-- **Express.js** — `app.get()`/`router.post()`, path params, `req.params`/`req.query`/`req.body` extraction
-- **Go (Gin/Echo/Chi/net-http)** — route extraction, route groups, gorilla/mux support
-- **Spring Boot** — Java `@RestController`, `@GetMapping`/`@PostMapping`, `@RequestParam`/`@PathVariable`/`@RequestBody`
-- **Ruby on Rails** — `routes.rb` parsing, `resources`, namespaces, controller action extraction
-- **Rust (Actix/Axum)** — attribute macros, `.route()` chaining, `Query`/`Json` parameter extraction
-- **GraphQL** — SDL schema parsing, query/mutation extraction with argument types
-- **gRPC/Protobuf** — `.proto` file parsing, service/method extraction, message field mapping, streaming detection
-- **WebSocket** — FastAPI WebSocket, Django Channels, Socket.IO, ws library endpoint detection
-- **OpenAPI/Swagger** — parses OpenAPI 3.x and Swagger 2.x specs with `$ref` resolution (works without source code)
-- **Schema extraction** — infer request/response shapes from Pydantic models, Java POJOs, TypeScript interfaces
-- **Cross-file resolution** — follow imports to find type definitions across Python, Java, TypeScript
-- **15 IPC detectors** — CLI, socket, Python API, protocol, file I/O, Flask/FastAPI, Spring Boot, OpenAPI, Express.js, Django, Go, Rails, Rust, GraphQL, gRPC
-- **`--help` parser** — for non-Python CLIs (Go, Rust, Node), parses help output to extract commands and flags
-- **Smart filtering** — skips test functions, private methods, function factories, `sys.exit()` callers, generic methods
-
-### Code Generation
-
-- **5 implementation strategies**: `cli_subcommand`, `cli_function`, `python_call`, `http_call`, `stub`
-- **Async HTTP backend** with `httpx` for REST API proxying
-- **Auto-generated `run_<app>` tool** for single-purpose CLI apps
-- **Jinja2 templates** with Python-specific filters
-- **Post-generation validation** — all generated Python is verified via `ast.parse()`
-- **Auto-install** — installs target project and generated server dependencies
-- **MCP config generation** — ready-to-paste `mcp.json` for Claude Code
-- **MCP Prompts** — auto-generated server-delivered skills from docstrings and usage patterns
-- **Dynamic MCP Resources** — tool index and documentation served as always-up-to-date resources
-- **AGENTS.md generation** — full tool index for coding agent discoverability
-- **Streamable HTTP transport** — `--transport http` for remote/enterprise deployment
-- **OpenTelemetry** — traces and metrics for tool invocation tracking
-- **Docker packaging** — auto-generated Dockerfile for HTTP servers
-- **`mcp-anything serve`** — run generated servers directly without installing
-
-### Output
-
-The generated server package includes:
+## What Gets Generated
 
 ```
 mcp-<name>-server/
 ├── src/<name>/
 │   ├── server.py        # FastMCP server (stdio or HTTP)
-│   ├── backend.py       # CLI/API backend adapter
+│   ├── backend.py       # Backend adapter (CLI/HTTP/API)
 │   ├── tools/           # Tool modules by category
-│   ├── prompts.py       # MCP prompts (skills)
-│   └── resources.py     # MCP resources (dynamic docs)
+│   ├── prompts.py       # Server-delivered MCP prompts
+│   └── resources.py     # Dynamic MCP resources
 ├── tests/               # Generated pytest tests
 ├── AGENTS.md            # Tool index for coding agents
 ├── Dockerfile           # Container deployment (HTTP mode)
-└── pyproject.toml       # Ready to pip install
+└── pyproject.toml       # pip install -e .
+```
+
+## Local or Remote
+
+**Local (stdio)** — the default. Runs as a subprocess, zero config:
+
+```bash
+mcp-anything generate /path/to/app
+```
+
+**Remote (HTTP)** — streamable HTTP/SSE transport for production deployment:
+
+```bash
+mcp-anything generate /path/to/app --transport http
+```
+
+This adds OpenTelemetry tracing, a Dockerfile, and an HTTP endpoint your agents can reach over the network.
+
+## Supported Languages & Frameworks
+
+| Language | Frameworks |
+|----------|-----------|
+| Python | FastAPI, Flask, Django REST, Click, Typer, argparse |
+| Java | Spring Boot |
+| TypeScript/JS | Express.js |
+| Go | Gin, Echo, Chi, net/http, gorilla/mux |
+| Ruby | Rails |
+| Rust | Actix, Axum, Rocket, Warp |
+| Any | OpenAPI/Swagger specs, GraphQL SDL, gRPC/Protobuf |
+
+Plus WebSocket detection (FastAPI-WS, Django Channels, Socket.IO), cross-file import resolution, and schema extraction from Pydantic models, Java POJOs, and TypeScript interfaces.
+
+## Built for the Agentic Era
+
+MCP is evolving beyond simple tool calls. `mcp-anything` generates servers that use the full protocol:
+
+- **MCP Prompts** — server-delivered skills that teach agents how to use your tools effectively
+- **MCP Resources** — dynamic, always-up-to-date documentation served as resources, not stale markdown
+- **AGENTS.md** — a structured tool index that coding agents (Cursor, Claude Code, Copilot) can discover automatically
+- **OpenTelemetry** — traces every tool invocation so you can monitor what your agents are actually doing
+- **Docker-ready** — one command to containerize and deploy your MCP server anywhere
+
+## Commands
+
+```bash
+mcp-anything generate /path/to/app     # Full pipeline: analyze → package
+mcp-anything analyze /path/to/app      # Analysis only
+mcp-anything serve ./mcp-myapp-server  # Run without installing
+mcp-anything status ./mcp-myapp-server # Check generation status
+```
+
+### Key Flags
+
+```
+--transport http     Streamable HTTP instead of stdio
+--name NAME          Override server name
+--no-llm             Static analysis only (no API key needed)
+--no-install         Skip dependency installation
+--resume             Resume from saved pipeline state
 ```
 
 ## Example
-
-Generate an MCP server for [httpstat](https://github.com/reorx/httpstat):
 
 ```bash
 mcp-anything generate /path/to/httpstat --name httpstat
 ```
 
-This produces a server with a `run_httpstat` tool that runs HTTP timing analysis:
+Add to your Claude Code config:
 
 ```json
 {
   "mcpServers": {
     "httpstat": {
-      "command": "python",
-      "args": ["-m", "httpstat.server"]
+      "command": "mcp-httpstat"
     }
   }
 }
 ```
 
-Tested against real projects — see [ROADMAP.md](ROADMAP.md#tested-against) for the full list.
+Or with HTTP transport:
 
-## Architecture
+```json
+{
+  "mcpServers": {
+    "httpstat": {
+      "url": "http://localhost:8000/sse"
+    }
+  }
+}
+```
+
+## How It Works
 
 ```
-6-phase pipeline: ANALYZE → DESIGN → IMPLEMENT → TEST → DOCUMENT → PACKAGE
+ANALYZE → DESIGN → IMPLEMENT → TEST → DOCUMENT → PACKAGE
 ```
 
-- Static detectors + optional LLM analysis (Claude API)
-- Jinja2 templates for code generation
-- Generated servers use the `mcp` SDK's FastMCP
-- Pipeline state saved as JSON manifest for resume support
+15 static detectors scan your codebase for IPC patterns (CLI args, HTTP routes, gRPC services, GraphQL schemas, WebSocket endpoints). Optional LLM analysis via Claude API enhances tool descriptions and grouping. Jinja2 templates emit valid, tested Python. Pipeline state is saved as JSON for resume support.
 
 ## Development
 
@@ -172,9 +151,9 @@ pip install -e ".[dev,llm]"
 pytest tests/ -v
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide, architecture overview, and how to add new detectors/analyzers.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the architecture guide and how to add new detectors.
 
-See [ROADMAP.md](ROADMAP.md) for planned features and what's been completed.
+See [ROADMAP.md](ROADMAP.md) for what's shipped and what's next.
 
 ## License
 
