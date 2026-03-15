@@ -20,7 +20,7 @@ Current version: **0.1.0**
 - [x] Smart filtering (skip tests, private methods, factories, `sys.exit()` callers)
 - [x] Docstring parsing (Google, NumPy, Sphinx styles)
 
-### IPC Detection (8 detectors)
+### IPC Detection (15 detectors)
 - [x] CLI (argparse, click, typer, fire, getopt)
 - [x] Socket (TCP/UDP, xmlrpc, ZeroMQ)
 - [x] Python API (ctypes, cffi, pybind11)
@@ -29,6 +29,13 @@ Current version: **0.1.0**
 - [x] Flask/FastAPI (route decorators, APIRouter, Blueprint)
 - [x] Spring Boot (Java annotations, REST controllers)
 - [x] OpenAPI/Swagger (spec file ingestion)
+- [x] Express.js (route definitions, Router mounts)
+- [x] Django REST Framework (ViewSets, APIViews)
+- [x] Go web (Gin, Echo, Chi, net/http, gorilla/mux)
+- [x] Ruby on Rails (controllers, routes.rb)
+- [x] Rust web (Actix, Axum, Rocket, Warp)
+- [x] GraphQL (SDL schemas, Graphene, Strawberry, Apollo)
+- [x] gRPC/Protobuf (.proto service definitions)
 
 ### HTTP Framework Support
 - [x] **FastAPI** — route extraction, `Query()`/`Path()`/`Body()` params, `Depends()` filtering, APIRouter prefixes, Pydantic model detection
@@ -76,6 +83,15 @@ Current version: **0.1.0**
 
 ---
 
+### v0.4.0 — Smarter Analysis
+- [x] **Request/response schema extraction** — infer JSON body shapes from Pydantic models, Java POJOs, TypeScript interfaces
+- [x] **Cross-file dependency resolution** — follow imports to find related types and models (Python, Java, TypeScript)
+- [x] **GraphQL support** — SDL schema parsing, query/mutation/subscription extraction with argument types
+- [x] **gRPC/protobuf support** — `.proto` file parsing, service/method extraction, message field mapping, streaming detection
+- [x] **WebSocket endpoint support** — FastAPI WebSocket, Django Channels, Socket.IO, ws library detection
+
+---
+
 ## In Progress
 
 _Nothing currently in progress._
@@ -83,14 +99,6 @@ _Nothing currently in progress._
 ---
 
 ## Planned
-
-### v0.4.0 — Smarter Analysis
-
-- [ ] **Request/response schema extraction** — infer JSON body shapes from Pydantic models, Java POJOs, TypeScript interfaces
-- [ ] **Cross-file dependency resolution** — follow imports to find related types and models
-- [ ] **GraphQL support** — schema introspection, query/mutation extraction
-- [ ] **gRPC/protobuf support** — `.proto` file parsing, service/method extraction
-- [ ] **WebSocket endpoint support** — bidirectional communication tools
 
 ### v0.5.0 — Developer Experience
 

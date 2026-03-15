@@ -17,6 +17,8 @@ class Language(str, Enum):
     TYPESCRIPT = "typescript"
     LUA = "lua"
     RUBY = "ruby"
+    GRAPHQL = "graphql"
+    PROTOBUF = "protobuf"
     SHELL = "shell"
     OTHER = "other"
 

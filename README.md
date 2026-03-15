@@ -68,8 +68,13 @@ mcp-anything status ./mcp-myapp-server # Check generation status
 - **Spring Boot** — Java `@RestController`, `@GetMapping`/`@PostMapping`, `@RequestParam`/`@PathVariable`/`@RequestBody`
 - **Ruby on Rails** — `routes.rb` parsing, `resources`, namespaces, controller action extraction
 - **Rust (Actix/Axum)** — attribute macros, `.route()` chaining, `Query`/`Json` parameter extraction
+- **GraphQL** — SDL schema parsing, query/mutation extraction with argument types
+- **gRPC/Protobuf** — `.proto` file parsing, service/method extraction, message field mapping, streaming detection
+- **WebSocket** — FastAPI WebSocket, Django Channels, Socket.IO, ws library endpoint detection
 - **OpenAPI/Swagger** — parses OpenAPI 3.x and Swagger 2.x specs with `$ref` resolution (works without source code)
-- **13 IPC detectors** — CLI, socket, Python API, protocol, file I/O, Flask/FastAPI, Spring Boot, OpenAPI, Express.js, Django, Go, Rails, Rust
+- **Schema extraction** — infer request/response shapes from Pydantic models, Java POJOs, TypeScript interfaces
+- **Cross-file resolution** — follow imports to find type definitions across Python, Java, TypeScript
+- **15 IPC detectors** — CLI, socket, Python API, protocol, file I/O, Flask/FastAPI, Spring Boot, OpenAPI, Express.js, Django, Go, Rails, Rust, GraphQL, gRPC
 - **`--help` parser** — for non-Python CLIs (Go, Rust, Node), parses help output to extract commands and flags
 - **Smart filtering** — skips test functions, private methods, function factories, `sys.exit()` callers, generic methods
 

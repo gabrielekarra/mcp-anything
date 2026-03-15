@@ -21,6 +21,14 @@ from mcp_anything.analysis.go_analyzer import (
     analyze_go_file,
     go_results_to_capabilities,
 )
+from mcp_anything.analysis.graphql_analyzer import (
+    analyze_graphql_file,
+    graphql_results_to_capabilities,
+)
+from mcp_anything.analysis.grpc_analyzer import (
+    analyze_proto_file,
+    grpc_results_to_capabilities,
+)
 from mcp_anything.analysis.java_analyzer import (
     analyze_java_file,
     java_results_to_capabilities,
@@ -38,6 +46,10 @@ from mcp_anything.analysis.rails_analyzer import (
 from mcp_anything.analysis.rust_web_analyzer import (
     analyze_rust_web_file,
     rust_web_results_to_capabilities,
+)
+from mcp_anything.analysis.websocket_analyzer import (
+    analyze_websocket_file,
+    websocket_results_to_capabilities,
 )
 from mcp_anything.analysis.llm_analyzer import llm_analyze
 from mcp_anything.analysis.scanner import scan_codebase
@@ -253,6 +265,56 @@ class AnalyzePhase(Phase):
             fw_label = "/".join(frameworks).title() if frameworks else "Rust"
             console.print(f"    {fw_label}: {route_count} HTTP routes")
 
+        # 3j. GraphQL analysis
+        graphql_results = {}
+        for fi in files:
+            if fi.language == Language.GRAPHQL:
+                gql_result = analyze_graphql_file(root, fi)
+                if gql_result and (gql_result.queries or gql_result.mutations):
+                    graphql_results[fi.path] = gql_result
+                    fi.is_api_surface = True
+
+        if graphql_results:
+            query_count = sum(len(r.queries) for r in graphql_results.values())
+            mutation_count = sum(len(r.mutations) for r in graphql_results.values())
+            console.print(
+                f"    GraphQL: {query_count} queries, {mutation_count} mutations"
+            )
+
+        # 3k. gRPC/Protobuf analysis
+        grpc_results = {}
+        for fi in files:
+            if fi.language == Language.PROTOBUF:
+                proto_result = analyze_proto_file(root, fi)
+                if proto_result and proto_result.services:
+                    grpc_results[fi.path] = proto_result
+                    fi.is_api_surface = True
+
+        if grpc_results:
+            service_count = sum(len(r.services) for r in grpc_results.values())
+            method_count = sum(
+                len(m) for r in grpc_results.values()
+                for s in r.services for m in [s.methods]
+            )
+            console.print(
+                f"    gRPC: {service_count} services, {method_count} RPC methods"
+            )
+
+        # 3l. WebSocket analysis
+        websocket_results = {}
+        for fi in files:
+            if fi.language in (
+                Language.PYTHON, Language.JAVASCRIPT, Language.TYPESCRIPT,
+            ):
+                ws_result = analyze_websocket_file(root, fi)
+                if ws_result and ws_result.endpoints:
+                    websocket_results[fi.path] = ws_result
+                    fi.is_api_surface = True
+
+        if websocket_results:
+            ws_count = sum(len(r.endpoints) for r in websocket_results.values())
+            console.print(f"    WebSocket: {ws_count} endpoints")
+
         # 4. LLM analysis (if enabled)
         llm_result = None
         if not ctx.options.no_llm:
@@ -274,6 +336,7 @@ class AnalyzePhase(Phase):
                 java_results, flask_fastapi_results, openapi_capabilities,
                 express_results, django_results, go_results,
                 rails_results, rust_web_results,
+                graphql_results, grpc_results, websocket_results,
             )
 
         # Override backend if forced
@@ -299,6 +362,9 @@ class AnalyzePhase(Phase):
         go_results: dict | None = None,
         rails_results: dict | None = None,
         rust_web_results: dict | None = None,
+        graphql_results: dict | None = None,
+        grpc_results: dict | None = None,
+        websocket_results: dict | None = None,
     ) -> AnalysisResult:
         """Generate AnalysisResult from all analyzers without LLM."""
         primary_ipc = None
@@ -357,6 +423,21 @@ class AnalyzePhase(Phase):
         if rust_web_results:
             rust_caps = rust_web_results_to_capabilities(rust_web_results)
             capabilities.extend(rust_caps)
+
+        # Add GraphQL capabilities
+        if graphql_results:
+            gql_caps = graphql_results_to_capabilities(graphql_results)
+            capabilities.extend(gql_caps)
+
+        # Add gRPC capabilities
+        if grpc_results:
+            grpc_caps = grpc_results_to_capabilities(grpc_results)
+            capabilities.extend(grpc_caps)
+
+        # Add WebSocket capabilities
+        if websocket_results:
+            ws_caps = websocket_results_to_capabilities(websocket_results)
+            capabilities.extend(ws_caps)
 
         # Add OpenAPI capabilities
         if openapi_capabilities:
