@@ -1,6 +1,6 @@
 # MCP-Anything
 
-[https://github.com/user-attachments/assets/promo.mp4](https://github.com/gabrielekarra/mcp-anything/blob/main/promo.mp4)
+<video src="https://github.com/gabrielekarra/mcp-anything/blob/main/promo.mp4" width="100%" autoplay loop muted></video>
 
 Generate an MCP server from any codebase in one command.
 
