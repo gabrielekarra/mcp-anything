@@ -67,6 +67,15 @@ Current version: **0.1.0**
 
 ---
 
+### v0.3.0 — More Languages & Frameworks
+- [x] **Express.js / Node.js** — route extraction from `app.get()`, `router.post()`, path params (`:id`), `req.params`/`req.query`/`req.body` extraction
+- [x] **Go Gin / Echo / Chi / net-http** — route extraction, route groups, path params, query/body parameter detection, gorilla/mux support
+- [x] **Django REST Framework** — ViewSets (list/create/retrieve/update/destroy), `@action` custom actions, serializer field extraction, `urls.py` pattern parsing
+- [x] **Ruby on Rails** — `routes.rb` parsing (`resources`, `namespace`, `only:` constraints, explicit routes), controller action extraction, strong parameters
+- [x] **Rust Actix/Axum** — Actix attribute macros (`#[get]`, `#[post]`), Axum `.route()` chaining, struct field extraction for `Query`/`Json` params
+
+---
+
 ## In Progress
 
 _Nothing currently in progress._
@@ -74,14 +83,6 @@ _Nothing currently in progress._
 ---
 
 ## Planned
-
-### v0.3.0 — More Languages & Frameworks
-
-- [ ] **Express.js / Node.js** — route extraction from `app.get()`, `router.post()`, middleware chains
-- [ ] **Go net/http / Gin / Echo** — handler extraction from `http.HandleFunc`, Gin route groups
-- [ ] **Django REST Framework** — ViewSets, serializers, URL patterns
-- [ ] **Ruby on Rails** — `routes.rb` parsing, controller action extraction
-- [ ] **Rust Actix/Axum** — handler extraction from route macros
 
 ### v0.4.0 — Smarter Analysis
 

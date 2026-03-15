@@ -62,9 +62,14 @@ mcp-anything status ./mcp-myapp-server # Check generation status
 - **Click/Typer support** — extracts rich parameter info from `@click.option()`, `@click.argument()`, `typer.Option()`, `typer.Argument()`
 - **Argparse detection** — finds subcommands via `add_parser()` calls
 - **FastAPI/Flask** — route extraction, `Query()`/`Path()`/`Body()` params, `Depends()` filtering, APIRouter prefixes
+- **Django REST Framework** — ViewSets, serializers, `@action` custom actions, `urls.py` pattern parsing
+- **Express.js** — `app.get()`/`router.post()`, path params, `req.params`/`req.query`/`req.body` extraction
+- **Go (Gin/Echo/Chi/net-http)** — route extraction, route groups, gorilla/mux support
 - **Spring Boot** — Java `@RestController`, `@GetMapping`/`@PostMapping`, `@RequestParam`/`@PathVariable`/`@RequestBody`
+- **Ruby on Rails** — `routes.rb` parsing, `resources`, namespaces, controller action extraction
+- **Rust (Actix/Axum)** — attribute macros, `.route()` chaining, `Query`/`Json` parameter extraction
 - **OpenAPI/Swagger** — parses OpenAPI 3.x and Swagger 2.x specs with `$ref` resolution (works without source code)
-- **8 IPC detectors** — CLI, socket, Python API, protocol, file I/O, Flask/FastAPI, Spring Boot, OpenAPI
+- **13 IPC detectors** — CLI, socket, Python API, protocol, file I/O, Flask/FastAPI, Spring Boot, OpenAPI, Express.js, Django, Go, Rails, Rust
 - **`--help` parser** — for non-Python CLIs (Go, Rust, Node), parses help output to extract commands and flags
 - **Smart filtering** — skips test functions, private methods, function factories, `sys.exit()` callers, generic methods
 

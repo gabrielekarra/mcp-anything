@@ -5,9 +5,21 @@ from mcp_anything.analysis.ast_analyzer import (
     ast_results_to_capabilities,
 )
 from mcp_anything.analysis.detectors import ALL_DETECTORS
+from mcp_anything.analysis.django_analyzer import (
+    analyze_django_file,
+    django_results_to_capabilities,
+)
+from mcp_anything.analysis.express_analyzer import (
+    analyze_express_file,
+    express_results_to_capabilities,
+)
 from mcp_anything.analysis.flask_fastapi_analyzer import (
     analyze_flask_fastapi_file,
     flask_fastapi_results_to_capabilities,
+)
+from mcp_anything.analysis.go_analyzer import (
+    analyze_go_file,
+    go_results_to_capabilities,
 )
 from mcp_anything.analysis.java_analyzer import (
     analyze_java_file,
@@ -17,6 +29,15 @@ from mcp_anything.analysis.openapi_analyzer import (
     find_openapi_specs,
     openapi_to_capabilities,
     parse_openapi_spec,
+)
+from mcp_anything.analysis.rails_analyzer import (
+    analyze_rails_file,
+    analyze_rails_routes,
+    rails_results_to_capabilities,
+)
+from mcp_anything.analysis.rust_web_analyzer import (
+    analyze_rust_web_file,
+    rust_web_results_to_capabilities,
 )
 from mcp_anything.analysis.llm_analyzer import llm_analyze
 from mcp_anything.analysis.scanner import scan_codebase
@@ -151,6 +172,87 @@ class AnalyzePhase(Phase):
                         for c in help_caps
                     ]
 
+        # 3e. Express.js analysis
+        express_results = {}
+        for fi in files:
+            if fi.language in (Language.JAVASCRIPT, Language.TYPESCRIPT):
+                expr_result = analyze_express_file(root, fi)
+                if expr_result and expr_result.routes:
+                    express_results[fi.path] = expr_result
+                    fi.is_api_surface = True
+
+        if express_results:
+            route_count = sum(len(r.routes) for r in express_results.values())
+            console.print(f"    Express.js: {route_count} HTTP routes")
+
+        # 3f. Django REST Framework analysis
+        django_results = {}
+        for fi in files:
+            if fi.language == Language.PYTHON:
+                dj_result = analyze_django_file(root, fi)
+                if dj_result and dj_result.endpoints:
+                    django_results[fi.path] = dj_result
+                    fi.is_api_surface = True
+
+        if django_results:
+            endpoint_count = sum(len(r.endpoints) for r in django_results.values())
+            viewset_count = sum(len(r.viewsets) for r in django_results.values())
+            console.print(
+                f"    Django REST Framework: {endpoint_count} endpoints, "
+                f"{viewset_count} ViewSets"
+            )
+
+        # 3g. Go web framework analysis
+        go_results = {}
+        for fi in files:
+            if fi.language == Language.GO:
+                go_result = analyze_go_file(root, fi)
+                if go_result and go_result.routes:
+                    go_results[fi.path] = go_result
+                    fi.is_api_surface = True
+
+        if go_results:
+            route_count = sum(len(r.routes) for r in go_results.values())
+            frameworks = {r.framework for r in go_results.values() if r.framework}
+            fw_label = "/".join(frameworks).title() if frameworks else "Go"
+            console.print(f"    {fw_label}: {route_count} HTTP routes")
+
+        # 3h. Ruby on Rails analysis
+        rails_results = {}
+        # First try routes.rb for the full picture
+        rails_route_result = analyze_rails_routes(root)
+        if rails_route_result:
+            rails_results["config/routes.rb"] = rails_route_result
+        # Also scan individual controller files
+        for fi in files:
+            if fi.language == Language.RUBY:
+                rails_result = analyze_rails_file(root, fi)
+                if rails_result and rails_result.routes:
+                    rails_results[fi.path] = rails_result
+                    fi.is_api_surface = True
+
+        if rails_results:
+            route_count = sum(len(r.routes) for r in rails_results.values())
+            controller_count = sum(len(r.controllers) for r in rails_results.values())
+            console.print(
+                f"    Rails: {route_count} routes, {controller_count} controllers"
+            )
+
+        # 3i. Rust web framework analysis
+        rust_web_results = {}
+        for fi in files:
+            if fi.language == Language.RUST:
+                rust_result = analyze_rust_web_file(root, fi)
+                if rust_result and rust_result.routes:
+                    rust_web_results[fi.path] = rust_result
+                    fi.is_api_surface = True
+
+        if rust_web_results:
+            route_count = sum(len(r.routes) for r in rust_web_results.values())
+            frameworks = {r.framework for r in rust_web_results.values() if r.framework}
+            fw_label = "/".join(frameworks).title() if frameworks else "Rust"
+            console.print(f"    {fw_label}: {route_count} HTTP routes")
+
         # 4. LLM analysis (if enabled)
         llm_result = None
         if not ctx.options.no_llm:
@@ -170,6 +272,8 @@ class AnalyzePhase(Phase):
             result = self._ast_fallback(
                 ctx.manifest.server_name, files, all_mechanisms, ast_results,
                 java_results, flask_fastapi_results, openapi_capabilities,
+                express_results, django_results, go_results,
+                rails_results, rust_web_results,
             )
 
         # Override backend if forced
@@ -190,18 +294,29 @@ class AnalyzePhase(Phase):
         java_results: dict | None = None,
         flask_fastapi_results: dict | None = None,
         openapi_capabilities: list | None = None,
+        express_results: dict | None = None,
+        django_results: dict | None = None,
+        go_results: dict | None = None,
+        rails_results: dict | None = None,
+        rust_web_results: dict | None = None,
     ) -> AnalysisResult:
-        """Generate AnalysisResult from AST/Java/Flask/FastAPI/OpenAPI analysis without LLM."""
+        """Generate AnalysisResult from all analyzers without LLM."""
         primary_ipc = None
         if ipc_mechanisms:
             primary_ipc = max(ipc_mechanisms, key=lambda m: m.confidence).ipc_type
 
         languages = list({f.language for f in files if f.language != Language.OTHER})
 
-        # When Flask/FastAPI routes are found, exclude those files from AST
+        # When framework routes are found, exclude those files from generic AST
         # to avoid duplicate generic function tools alongside HTTP route tools
+        framework_files: set[str] = set()
         if flask_fastapi_results:
-            filtered_ast = {k: v for k, v in ast_results.items() if k not in flask_fastapi_results}
+            framework_files.update(flask_fastapi_results.keys())
+        if django_results:
+            framework_files.update(django_results.keys())
+
+        if framework_files:
+            filtered_ast = {k: v for k, v in ast_results.items() if k not in framework_files}
         else:
             filtered_ast = ast_results
 
@@ -217,6 +332,31 @@ class AnalyzePhase(Phase):
         if flask_fastapi_results:
             ff_caps = flask_fastapi_results_to_capabilities(flask_fastapi_results)
             capabilities.extend(ff_caps)
+
+        # Add Express.js capabilities
+        if express_results:
+            expr_caps = express_results_to_capabilities(express_results)
+            capabilities.extend(expr_caps)
+
+        # Add Django REST Framework capabilities
+        if django_results:
+            dj_caps = django_results_to_capabilities(django_results)
+            capabilities.extend(dj_caps)
+
+        # Add Go web framework capabilities
+        if go_results:
+            go_caps = go_results_to_capabilities(go_results)
+            capabilities.extend(go_caps)
+
+        # Add Rails capabilities
+        if rails_results:
+            rails_caps = rails_results_to_capabilities(rails_results)
+            capabilities.extend(rails_caps)
+
+        # Add Rust web framework capabilities
+        if rust_web_results:
+            rust_caps = rust_web_results_to_capabilities(rust_web_results)
+            capabilities.extend(rust_caps)
 
         # Add OpenAPI capabilities
         if openapi_capabilities:

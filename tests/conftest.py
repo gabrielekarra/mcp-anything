@@ -31,5 +31,30 @@ def fake_flask_app(fixtures_dir) -> Path:
 
 
 @pytest.fixture
+def fake_express_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_express_app"
+
+
+@pytest.fixture
+def fake_django_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_django_app"
+
+
+@pytest.fixture
+def fake_go_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_go_app"
+
+
+@pytest.fixture
+def fake_rails_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_rails_app"
+
+
+@pytest.fixture
+def fake_rust_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_rust_app"
+
+
+@pytest.fixture
 def tmp_output(tmp_path) -> Path:
     return tmp_path / "output"

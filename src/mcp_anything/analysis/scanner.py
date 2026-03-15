@@ -23,6 +23,7 @@ EXTENSION_MAP: dict[str, Language] = {
     ".mjs": Language.JAVASCRIPT,
     ".ts": Language.TYPESCRIPT,
     ".tsx": Language.TYPESCRIPT,
+    ".rb": Language.RUBY,
     ".lua": Language.LUA,
     ".sh": Language.SHELL,
     ".bash": Language.SHELL,
@@ -49,6 +50,7 @@ SKIP_FILES = {
 ENTRY_POINT_PATTERNS = {
     "__main__.py", "main.py", "cli.py", "app.py", "server.py",
     "main.c", "main.cpp", "main.go", "main.rs", "index.js", "index.ts",
+    "app.js", "server.js",
     # Java Spring Boot
     "Application.java",
 }
