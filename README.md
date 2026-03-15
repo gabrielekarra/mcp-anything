@@ -1,5 +1,7 @@
 # MCP-Anything
 
+https://github.com/user-attachments/assets/promo.mp4
+
 Generate an MCP server from any codebase in one command.
 
 ```bash
