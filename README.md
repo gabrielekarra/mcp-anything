@@ -164,12 +164,6 @@ See [`examples/`](examples/) for full details, generated code, and test results.
 
 See [ROADMAP.md](ROADMAP.md) for the full roadmap. Top priorities:
 
-- [ ] Desktop software showcase (Blender, GIMP, Audacity)
-- [ ] OAuth/token auth on the MCP server itself
-- [ ] Generated test improvements with mocked backends
-- [ ] Plugin system for custom detectors
-- [ ] URL-based generation (`mcp-anything generate https://api.example.com/openapi.json`)
-
 ## Development
 
 ```bash
