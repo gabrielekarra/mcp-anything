@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "yt-dlp": {
+      "command": "mcp-yt-dlp",
+      "args": []
+    }
+  }
+}

@@ -1,0 +1,71 @@
+"""Resources for ffmpeg."""
+
+import json
+
+from mcp.server.fastmcp import FastMCP
+
+
+def register_resources(server: FastMCP, backend) -> None:
+    """Register resources with the server."""
+
+    @server.resource("app://ffmpeg/status")
+    async def ffmpeg_status() -> str:
+        """Current status and version of ffmpeg"""
+        try:
+            version = await backend.run_cli(["--version"])
+        except Exception:
+            version = "unknown"
+        return json.dumps({
+            "name": "ffmpeg",
+            "version": version.strip(),
+            "status": "running",
+        }, indent=2)
+
+    @server.resource("app://ffmpeg/commands")
+    async def ffmpeg_commands() -> str:
+        """Available commands and tools in ffmpeg"""
+        tools = server.list_tools()
+        commands = []
+        for tool in tools:
+            commands.append({
+                "name": tool.name,
+                "description": tool.description or "",
+            })
+        return json.dumps({"commands": commands}, indent=2)
+
+    @server.resource("docs://ffmpeg/tool-index")
+    async def ffmpeg_tool_index() -> str:
+        """Complete index of all ffmpeg tools with parameters and usage"""
+        # Dynamic documentation resource
+        tools = server.list_tools()
+        doc_entries = []
+        for tool in tools:
+            entry = {"name": tool.name, "description": tool.description or ""}
+            if hasattr(tool, "inputSchema") and tool.inputSchema:
+                entry["parameters"] = tool.inputSchema.get("properties", {})
+                entry["required"] = tool.inputSchema.get("required", [])
+            doc_entries.append(entry)
+        return json.dumps({
+            "server": "ffmpeg",
+            "resource": "docs://ffmpeg/tool-index",
+            "tools": doc_entries,
+        }, indent=2)
+
+    @server.resource("docs://ffmpeg/cli_options")
+    async def ffmpeg_cli_options_docs() -> str:
+        """Documentation for ffmpeg cli_options capabilities"""
+        # Dynamic documentation resource
+        tools = server.list_tools()
+        doc_entries = []
+        for tool in tools:
+            entry = {"name": tool.name, "description": tool.description or ""}
+            if hasattr(tool, "inputSchema") and tool.inputSchema:
+                entry["parameters"] = tool.inputSchema.get("properties", {})
+                entry["required"] = tool.inputSchema.get("required", [])
+            doc_entries.append(entry)
+        return json.dumps({
+            "server": "ffmpeg",
+            "resource": "docs://ffmpeg/cli_options",
+            "tools": doc_entries,
+        }, indent=2)
+

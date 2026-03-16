@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "imagemagick": {
+      "command": "mcp-imagemagick",
+      "args": []
+    }
+  }
+}

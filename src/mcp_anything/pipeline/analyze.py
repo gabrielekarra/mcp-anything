@@ -81,7 +81,11 @@ class AnalyzePhase(Phase):
         # Check for OpenAPI specs even if no source files
         spec_files = find_openapi_specs(root)
 
-        if not files and not spec_files:
+        # Check for help text files (e.g. ffmpeg help output captured to .txt)
+        from mcp_anything.analysis.help_parser import find_help_files, parse_help_text as _parse_help
+        help_text_files = find_help_files(root) if not files else []
+
+        if not files and not spec_files and not help_text_files:
             raise RuntimeError(f"No source files or API specs found in {root}")
 
         # 2. Run detectors
@@ -166,10 +170,23 @@ class AnalyzePhase(Phase):
                 )
 
         # 3d. For non-Python or thin codebases, try --help parsing
+        help_capabilities: list[Capability] = []
         ast_cap_count = sum(
             len(r.functions) + len(r.cli_commands) for r in ast_results.values()
         )
-        if ast_cap_count < 3:
+
+        # First: parse any .txt help files found in the directory
+        if help_text_files:
+            for htf in help_text_files:
+                console.print(f"    Parsing help file: {htf.name}")
+                content = htf.read_text(errors="replace")
+                help_caps = _parse_help(content, ctx.manifest.server_name)
+                if help_caps:
+                    console.print(f"    Found {len(help_caps)} capabilities from {htf.name}")
+                    help_capabilities.extend(help_caps)
+
+        # Then: try running --help for non-Python/thin codebases
+        if ast_cap_count < 3 and not help_capabilities:
             from mcp_anything.analysis.help_parser import run_help_command, parse_help_text
             help_text = run_help_command(root)
             if help_text:
@@ -177,12 +194,16 @@ class AnalyzePhase(Phase):
                 help_caps = parse_help_text(help_text, ctx.manifest.server_name)
                 if help_caps:
                     console.print(f"    Found {len(help_caps)} commands from --help")
-                    # Store for later merging in _ast_fallback
-                    ctx.manifest.extra_data = ctx.manifest.extra_data or {}
-                    ctx.manifest.extra_data["help_capabilities"] = [
-                        {"name": c.name, "description": c.description, "category": c.category}
-                        for c in help_caps
-                    ]
+                    help_capabilities.extend(help_caps)
+
+        if help_capabilities:
+            ctx.manifest.extra_data = ctx.manifest.extra_data or {}
+            ctx.manifest.extra_data["help_capabilities"] = [
+                {"name": c.name, "description": c.description, "category": c.category,
+                 "parameters": [{"name": p.name, "type": p.type, "description": p.description,
+                                 "required": p.required} for p in (c.parameters or [])]}
+                for c in help_capabilities
+            ]
 
         # 3e. Express.js analysis
         express_results = {}
@@ -337,6 +358,7 @@ class AnalyzePhase(Phase):
                 express_results, django_results, go_results,
                 rails_results, rust_web_results,
                 graphql_results, grpc_results, websocket_results,
+                help_capabilities,
             )
 
         # Override backend if forced
@@ -365,11 +387,14 @@ class AnalyzePhase(Phase):
         graphql_results: dict | None = None,
         grpc_results: dict | None = None,
         websocket_results: dict | None = None,
+        help_capabilities: list | None = None,
     ) -> AnalysisResult:
         """Generate AnalysisResult from all analyzers without LLM."""
         primary_ipc = None
         if ipc_mechanisms:
             primary_ipc = max(ipc_mechanisms, key=lambda m: m.confidence).ipc_type
+        elif help_capabilities:
+            primary_ipc = IPCType.CLI
 
         languages = list({f.language for f in files if f.language != Language.OTHER})
 
@@ -447,6 +472,10 @@ class AnalyzePhase(Phase):
                 if cap.name not in existing_names:
                     capabilities.append(cap)
                     existing_names.add(cap.name)
+
+        # Add help-parsed capabilities
+        if help_capabilities:
+            capabilities.extend(help_capabilities)
 
         # If AST found nothing, fall back to generic capability
         if not capabilities:

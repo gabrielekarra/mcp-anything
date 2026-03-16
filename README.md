@@ -42,6 +42,21 @@ mcp-anything generate /path/to/software
 
 That's it. You get a complete MCP server package in `mcp-<name>-server/`, ready to install and use.
 
+## Showcase
+
+MCP servers auto-generated from real software — no REST API, no OpenAPI spec, just source code and CLI analysis.
+
+| Software | What it is | Generated tools | Time |
+|----------|-----------|----------------|------|
+| **ffmpeg** | Video/audio processing (transcode, cut, merge, filter) | 101 tools | ~2s |
+| **ImageMagick** | Image processing (convert, resize, filter, composite) | 50 tools | ~2s |
+| **yt-dlp** | Video downloader (1,111 source files, 4,578 classes) | 50 tools | ~9s |
+| **click** | CLI framework (129 functions, 71 classes) | 50 tools | ~3s |
+
+These are tools that **no OpenAPI-to-MCP generator can produce** — the software has no REST API. MCP-Anything analyzed the source code and CLI interfaces and generated working MCP servers automatically.
+
+See [`examples/`](examples/) for the full generated code.
+
 ## How it works
 
 MCP-Anything runs a 6-phase pipeline:
@@ -136,10 +151,13 @@ mcp-anything status ./mcp-myapp-server
 
 ## Examples
 
-| Project | Type | Tools generated | Command |
-|---------|------|-----------------|---------|
-| [httpstat](https://github.com/reorx/httpstat) | Python CLI (argparse) | 2 | `mcp-anything generate ./httpstat --name httpstat` |
-| [click](https://github.com/pallets/click) | Python library (129 functions, 71 classes) | 50 | `mcp-anything generate ./click --name click` |
+| Project | Type | Tools | Command |
+|---------|------|-------|---------|
+| [ffmpeg](https://ffmpeg.org/) | Desktop CLI (video/audio) | 101 | `mcp-anything generate ./ffmpeg-help --name ffmpeg` |
+| [ImageMagick](https://docs.wand-py.org/) | Desktop library (image processing) | 50 | `mcp-anything generate ./wand --name imagemagick` |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Python CLI (video downloader) | 50 | `mcp-anything generate ./yt_dlp --name yt-dlp` |
+| [click](https://github.com/pallets/click) | Python library (CLI framework) | 50 | `mcp-anything generate ./click --name click` |
+| [httpstat](https://github.com/reorx/httpstat) | Python CLI (HTTP timing) | 2 | `mcp-anything generate ./httpstat --name httpstat` |
 
 See [`examples/`](examples/) for the full generated server code, mcp.json configs, and details.
 
