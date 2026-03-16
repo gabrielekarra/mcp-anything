@@ -1,14 +1,14 @@
-"""Tests for the implement phase."""
+"""Tests for the implement and package phases."""
 
 from unittest.mock import MagicMock, patch
 
-from mcp_anything.pipeline.implement import ImplementPhase
+from mcp_anything.pipeline.package import PackagePhase
 
 
 class TestInstallDependencies:
     def test_no_install_hint_no_error(self):
         """When there's no install hint, target install is skipped."""
-        phase = ImplementPhase()
+        phase = PackagePhase()
         ctx = MagicMock()
         ctx.manifest.design.target_install_hint = ""
         ctx.console.print = MagicMock()
@@ -23,7 +23,7 @@ class TestInstallDependencies:
 
     def test_install_handles_subprocess_error(self):
         """Install errors are returned as warnings, not raised."""
-        phase = ImplementPhase()
+        phase = PackagePhase()
         ctx = MagicMock()
         ctx.manifest.design.target_install_hint = "pip install -e /nonexistent"
         ctx.console.print = MagicMock()
