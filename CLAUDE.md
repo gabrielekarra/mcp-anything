@@ -28,6 +28,7 @@ One command: `mcp-anything generate <path>` → pip-installable MCP server packa
 - `src/mcp_anything/pipeline/package.py` — phase 6: pyproject.toml + install
 - `src/mcp_anything/codegen/emitter.py` — Jinja2 template rendering
 - `src/mcp_anything/models/` — Pydantic models (analysis, design, manifest)
+- `src/mcp_anything/url_fetcher.py` — URL spec fetching and type detection
 
 ## Detectors (15 total)
 Located in `src/mcp_anything/analyzers/`:
@@ -75,6 +76,7 @@ Working features:
 - MCP resources and prompts generation
 - LLM-enhanced analysis (optional, via Claude API)
 - Auth support on backend calls (API key, Bearer, Basic, OAuth2)
+- URL-based generation (`mcp-anything generate https://api.example.com/openapi.json`)
 
 ### What's BROKEN (bugs to fix)
 
@@ -98,7 +100,17 @@ Working features:
   `tool_module.py.j2`, which defines a `_trace` decorator that wraps each
   tool handler with `tracer.start_as_current_span("tool.<name>")`.
 
-**Bug 5: Docker is template-only (LOW)**
+**Bug 5: HTTP tools send conflicting OpenAPI defaults — FIXED 2026-03-16**
+- Generated HTTP tools baked OpenAPI spec default values into Python function
+  signatures (e.g. `type: str = "all"`, `affiliation: str = "owner,..."`).
+  When both params had defaults, they were always sent as query params even
+  when the user didn't provide them — causing 422 errors on APIs that reject
+  mutually exclusive params (e.g. GitHub's `type` + `affiliation`).
+- Fixed in `src/mcp_anything/codegen/renderer.py`: `_default_value()` now
+  always returns `None` for optional params. Only explicitly provided values
+  are sent to the backend.
+
+**Bug 6: Docker is template-only (LOW)**
 - Location: `src/mcp_anything/codegen/templates/Dockerfile.j2`
 - Problem: Dockerfile is generated but never validated (no build test).
 - Not a blocker — generating a Dockerfile the user can build manually is fine,
@@ -144,16 +156,22 @@ Passed `_tracer` to `register_tools()` and added a `_trace` decorator in
 `tool_module.py.j2` that wraps each tool handler with
 `tracer.start_as_current_span("tool.<name>")`.
 
-### Phase 4: Future Features (from ROADMAP v0.6.0+)
+### Phase 4: URL-based generation — DONE (2026-03-16)
 
-In priority order for "working MCP server for anything":
-1. **URL-based generation** — `mcp-anything generate https://api.example.com/docs`
-   (fetch OpenAPI spec from URL, huge UX win)
-2. **Generated test improvements** — mock backends so tests verify tool logic
+`mcp-anything generate https://api.example.com/openapi.json` now works.
+New module `src/mcp_anything/url_fetcher.py` handles URL detection, spec
+fetching, type detection (OpenAPI JSON/YAML, Swagger, GraphQL SDL, Protobuf),
+name derivation from spec title or hostname, and Swagger UI/ReDoc URL resolution.
+24 tests in `tests/test_url_fetcher.py` including full pipeline integration.
+
+### Phase 5: Future Features (from ROADMAP v0.6.0+)
+
+In priority order:
+1. **Generated test improvements** — mock backends so tests verify tool logic
    without needing the real service running
-3. **Multi-service composition** — one MCP server proxying multiple backends
-4. **Config file** — `.mcp-anything.yaml` for persistent project settings
-5. **Plugin system** — custom detectors for niche frameworks
+2. **Multi-service composition** — one MCP server proxying multiple backends
+3. **Config file** — `.mcp-anything.yaml` for persistent project settings
+4. **Plugin system** — custom detectors for niche frameworks
 
 ### What "Done" Looks Like
 

@@ -19,6 +19,7 @@ class CLIOptions(BaseModel):
     no_install: bool = False
     verbose: bool = False
     transport: str = "stdio"  # "stdio" or "http"
+    source_url: Optional[str] = None  # URL if fetched from remote
 
     def resolved_name(self) -> str:
         """Server name derived from codebase directory or override."""

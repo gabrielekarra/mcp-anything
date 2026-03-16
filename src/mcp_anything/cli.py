@@ -22,7 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # generate
     gen = subparsers.add_parser("generate", help="Run full 6-phase generation pipeline")
-    gen.add_argument("codebase_path", type=Path, help="Path to the application source code")
+    gen.add_argument("codebase_path", help="Path to source code or URL to an API spec")
     gen.add_argument("-o", "--output-dir", type=Path, help="Output directory")
     gen.add_argument("--name", help="Override server name")
     gen.add_argument(
@@ -44,13 +44,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     # analyze
     ana = subparsers.add_parser("analyze", help="Run analysis phase only")
-    ana.add_argument("codebase_path", type=Path)
+    ana.add_argument("codebase_path", help="Path to source code or URL to an API spec")
     ana.add_argument("--no-llm", action="store_true")
     ana.add_argument("-v", "--verbose", action="store_true")
 
     # design
     des = subparsers.add_parser("design", help="Run analysis + design phases")
-    des.add_argument("codebase_path", type=Path)
+    des.add_argument("codebase_path", help="Path to source code or URL to an API spec")
     des.add_argument("--no-llm", action="store_true")
     des.add_argument("-v", "--verbose", action="store_true")
 
@@ -70,8 +70,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def parse_options(args: argparse.Namespace) -> CLIOptions:
     """Convert parsed args to CLIOptions."""
+    codebase_path = args.codebase_path
+    if isinstance(codebase_path, str):
+        codebase_path = Path(codebase_path)
     return CLIOptions(
-        codebase_path=args.codebase_path,
+        codebase_path=codebase_path,
         output_dir=getattr(args, "output_dir", None),
         name=getattr(args, "name", None),
         backend=getattr(args, "backend", None),
@@ -105,7 +108,29 @@ def main() -> None:
         run_server(args.output_dir, args.transport, args.host, args.port, console)
         return
 
+    # Handle URL-based generation
+    source_url = None
+    if hasattr(args, "codebase_path") and isinstance(args.codebase_path, str):
+        from mcp_anything.url_fetcher import is_url
+
+        if is_url(args.codebase_path):
+            source_url = args.codebase_path
+            from mcp_anything.url_fetcher import fetch_url
+
+            try:
+                temp_dir, derived_name = fetch_url(source_url, console)
+            except RuntimeError as exc:
+                console.print(f"[red]Error:[/red] {exc}")
+                sys.exit(1)
+            args.codebase_path = temp_dir
+            if not getattr(args, "name", None):
+                args.name = derived_name
+        else:
+            args.codebase_path = Path(args.codebase_path)
+
     options = parse_options(args)
+    if source_url:
+        options.source_url = source_url
 
     if not options.codebase_path.exists():
         console.print(f"[red]Error:[/red] Codebase path does not exist: {options.codebase_path}")

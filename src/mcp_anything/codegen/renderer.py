@@ -79,22 +79,13 @@ def _python_type(type_str: str) -> str:
 
 
 def _default_value(param) -> str:
-    """Generate a Python default value expression."""
-    if param.default is not None:
-        # Check if the resolved type is str-like
-        resolved = _python_type(param.type)
-        if resolved == "str":
-            return f'"{param.default}"'
-        # Numeric/boolean defaults
-        if param.default in ("True", "False"):
-            return param.default
-        try:
-            float(param.default)
-            return param.default
-        except (ValueError, TypeError):
-            pass
-        # Unrecognized default value — quote it as string to be safe
-        return f'"{param.default}"'
+    """Generate a Python default value expression.
+
+    Always returns None for optional parameters so that only explicitly
+    provided values are sent to the backend.  This avoids conflicts where
+    an API rejects mutually-exclusive query params that both carry their
+    OpenAPI-spec defaults (e.g. GitHub's type + affiliation).
+    """
     if not param.required:
         return "None"
     return ""

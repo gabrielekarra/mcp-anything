@@ -115,7 +115,7 @@ Current version: **0.1.1**
 
 ### Future
 
-- [ ] **URL-based generation** — `mcp-anything generate https://api.example.com/openapi.json`
+- [x] **URL-based generation** — `mcp-anything generate https://api.example.com/openapi.json` with auto-detection of OpenAPI/Swagger/GraphQL/Protobuf specs, Swagger UI/ReDoc URL resolution, and name derivation
 - [ ] **npm/cargo/go package support** — generate MCP servers in other languages
 - [ ] **MCP server marketplace** — publish generated servers to a registry
 - [ ] **VS Code extension** — right-click a project to generate an MCP server
