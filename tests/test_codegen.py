@@ -113,7 +113,7 @@ class TestEmitter:
         emitter = Emitter(sample_design, tmp_path)
         emitter.emit_all()
 
-        server_path = tmp_path / "src" / "test_app" / "server.py"
+        server_path = tmp_path / "src" / "mcp_test_app" / "server.py"
         assert server_path.exists()
 
         # Parse as Python — should not raise SyntaxError
@@ -125,7 +125,7 @@ class TestEmitter:
         emitter.emit_all()
 
         for module_name in sample_design.tool_modules:
-            module_path = tmp_path / "src" / "test_app" / "tools" / f"{module_name}.py"
+            module_path = tmp_path / "src" / "mcp_test_app" / "tools" / f"{module_name}.py"
             assert module_path.exists()
             content = module_path.read_text()
             ast.parse(content)
@@ -157,7 +157,7 @@ class TestEmitter:
         emitter = Emitter(sample_design, tmp_path)
         emitter.emit_all()
 
-        backend_path = tmp_path / "src" / "test_app" / "backend.py"
+        backend_path = tmp_path / "src" / "mcp_test_app" / "backend.py"
         assert backend_path.exists()
         content = backend_path.read_text()
         ast.parse(content)
@@ -166,7 +166,7 @@ class TestEmitter:
         emitter = Emitter(sample_design, tmp_path)
         emitter.emit_all()
 
-        resources_path = tmp_path / "src" / "test_app" / "resources.py"
+        resources_path = tmp_path / "src" / "mcp_test_app" / "resources.py"
         assert resources_path.exists()
         content = resources_path.read_text()
         ast.parse(content)

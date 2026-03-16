@@ -859,6 +859,13 @@ def ast_results_to_capabilities(
             if any(b.startswith("Test") for b in cls.bases):
                 continue
 
+            # Extract __init__ params for auto-instantiation
+            init_params: list[ParameterSpec] = []
+            for method in cls.methods:
+                if method.name == "__init__":
+                    init_params = [p for p in method.parameters if p.name != "self"]
+                    break
+
             for method in cls.methods:
                 if _should_skip_function(method):
                     continue
@@ -874,6 +881,7 @@ def ast_results_to_capabilities(
                 qualified_name = f"{_snake_case(cls.name)}_{method.name}"
                 cap.name = qualified_name
                 cap.source_class = cls.name
+                cap.init_params = init_params
                 if qualified_name not in seen_names:
                     capabilities.append(cap)
                     seen_names.add(qualified_name)

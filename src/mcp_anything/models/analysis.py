@@ -73,6 +73,7 @@ class Capability(BaseModel):
     source_file: str = ""
     source_function: str = ""
     source_class: str = ""
+    init_params: list[ParameterSpec] = Field(default_factory=list)
     ipc_type: Optional[IPCType] = None
 
 

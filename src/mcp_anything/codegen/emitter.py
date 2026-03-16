@@ -13,7 +13,9 @@ class Emitter:
         self.design = design
         self.output_dir = output_dir
         self.env = create_jinja_env()
-        self.package_name = design.server_name.replace("-", "_")
+        # Prefix with mcp_ to avoid collisions with the target library
+        base_name = design.server_name.replace("-", "_")
+        self.package_name = f"mcp_{base_name}"
         self.generated_files: list[str] = []
 
     def _write(self, rel_path: str, content: str) -> None:

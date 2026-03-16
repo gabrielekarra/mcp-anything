@@ -6,5 +6,5 @@ import pytest
 @pytest.fixture
 def server():
     """Create a test server instance."""
-    from ffmpeg.server import server
+    from mcp_ffmpeg.server import server
     return server

@@ -115,7 +115,7 @@ class TestServerTemplate:
         design = _make_design("stdio")
         emitter = Emitter(design, tmp_path)
         emitter.emit_all()
-        server_py = (tmp_path / "src/testapp/server.py").read_text()
+        server_py = (tmp_path / "src/mcp_testapp/server.py").read_text()
         ast.parse(server_py)
         assert 'os.environ.get("MCP_TRANSPORT", "stdio")' in server_py
 
@@ -123,7 +123,7 @@ class TestServerTemplate:
         design = _make_design("http")
         emitter = Emitter(design, tmp_path)
         emitter.emit_all()
-        server_py = (tmp_path / "src/testapp/server.py").read_text()
+        server_py = (tmp_path / "src/mcp_testapp/server.py").read_text()
         ast.parse(server_py)
         assert 'os.environ.get("MCP_TRANSPORT", "http")' in server_py
         assert 'server.run(transport="sse"' in server_py
@@ -132,7 +132,7 @@ class TestServerTemplate:
         design = _make_design("http")
         emitter = Emitter(design, tmp_path)
         emitter.emit_all()
-        server_py = (tmp_path / "src/testapp/server.py").read_text()
+        server_py = (tmp_path / "src/mcp_testapp/server.py").read_text()
         assert "opentelemetry" in server_py
         assert "TracerProvider" in server_py
 
@@ -157,7 +157,7 @@ class TestPromptsGeneration:
         design = _make_design()
         emitter = Emitter(design, tmp_path)
         emitter.emit_all()
-        prompts_py = tmp_path / "src/testapp/prompts.py"
+        prompts_py = tmp_path / "src/mcp_testapp/prompts.py"
         assert prompts_py.exists()
         content = prompts_py.read_text()
         ast.parse(content)
@@ -167,7 +167,7 @@ class TestPromptsGeneration:
         design = _make_design()
         emitter = Emitter(design, tmp_path)
         emitter.emit_all()
-        server_py = (tmp_path / "src/testapp/server.py").read_text()
+        server_py = (tmp_path / "src/mcp_testapp/server.py").read_text()
         assert "register_prompts" in server_py
 
 

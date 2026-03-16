@@ -1,9 +1,15 @@
 # click MCP Server
 
-MCP server for click (CLI application, with 50 capabilities)
+MCP server for click (CLI application, with 200 capabilities)
 
 ## Available Tools
 
+### run_click
+
+Run click with the given command-line arguments
+
+Parameters:
+- `args` (string): Command-line arguments to pass to click (e.g. a URL or flags)
 ### add_completion_class
 
 Register a :class:`ShellComplete` subclass under the given name.
@@ -319,11 +325,933 @@ Writelines
 
 Parameters:
 - `lines` (Iterable): 
+### context_abort
+
+Aborts the script.
+
+### context_call_on_close
+
+Register a function to be called when the context tears down.
+
+Parameters:
+- `f` (Callable): The function to execute on teardown.
+### context_close
+
+Invoke all close callbacks registered with
+
+### context_command_path
+
+The computed command path.  This is used for the ``usage``
+
+### context_ensure_object
+
+Like :meth:`find_object` but sets the innermost object to a
+
+Parameters:
+- `object_type` (type): 
+### context_exit
+
+Exits the application with a given exit code.
+
+Parameters:
+- `code` (integer, optional):  (default: 0)
+### context_fail
+
+Aborts the execution of the program with a specific error
+
+Parameters:
+- `message` (string): the error message to fail with.
+### context_find_object
+
+Finds the closest object of a given type.
+
+Parameters:
+- `object_type` (type): 
+### context_find_root
+
+Finds the outermost context.
+
+### context_forward
+
+Similar to :meth:`invoke` but fills in default keyword
+
+### context_get_help
+
+Helper method to get formatted help page for the current
+
+### context_get_parameter_source
+
+Get the source of a parameter. This indicates the location
+
+Parameters:
+- `name` (string): The name of the parameter.
+### context_get_usage
+
+Helper method to get formatted usage string for the current
+
+### context_lookup_default
+
+Lookup default
+
+Parameters:
+- `name` (string): 
+- `call` (Literal, optional):  (default: True)
+### context_make_formatter
+
+Creates the :class:`~click.HelpFormatter` for the help and
+
+### context_meta
+
+This is a dictionary which is shared with all the contexts
+
+### context_protected_args
+
+Protected args
+
+### context_scope
+
+This helper method can be used with the context object to promote
+
+Parameters:
+- `cleanup` (boolean, optional): controls if the cleanup functions should be run or (default: True)
+### context_set_parameter_source
+
+Set the source of a parameter. This indicates the location
+
+Parameters:
+- `name` (string): The name of the parameter.
+- `source` (ParameterSource): A member of :class:`~click.core.ParameterSource`.
+### context_to_info_dict
+
+Gather information that could be useful for a tool generating
+
+### context_with_resource
+
+Register a resource as if it were used in a ``with``
+
+Parameters:
+- `context_manager` (AbstractContextManager): The context manager to enter.
+### convert_type
+
+Find the most appropriate :class:`ParamType` for the given Python
+
+Parameters:
+- `ty` (Any): 
+- `default` (Any, optional): 
+### date_time_convert
+
+Convert
+
+Parameters:
+- `value` (Any): 
+- `param` (Parameter): 
+- `ctx` (Context): 
+### date_time_get_metavar
+
+Get metavar
+
+Parameters:
+- `param` (Parameter): 
+- `ctx` (Context): 
+### date_time_to_info_dict
+
+To info dict
+
+### echo
+
+Print a message and newline to stdout or a file. This should be
+
+Parameters:
+- `message` (Any, optional): The string or bytes to output. Other objects are
+- `file` (IO, optional): The file to write to. Defaults to ``stdout``.
+- `nl` (boolean, optional): Print a newline after the message. Enabled by default. (default: True)
+- `err` (boolean, optional): Write to ``stderr`` instead of ``stdout``. (default: False)
+- `color` (boolean, optional): Force showing or hiding colors and other styles. By
+### echo_via_pager
+
+This function takes a text and shows it via an environment specific
+
+Parameters:
+- `text_or_generator` (Iterable): the text to page, or alternatively, a
+- `color` (boolean, optional): controls if the pager supports ANSI colors or not.  The
+### echoing_stdin_read
+
+Read
+
+Parameters:
+- `n` (integer, optional): 
+### echoing_stdin_read1
+
+Read1
+
+Parameters:
+- `n` (integer, optional): 
+### echoing_stdin_readline
+
+Readline
+
+Parameters:
+- `n` (integer, optional): 
+### edit
+
+Edit
+
+Parameters:
+- `text` (string): 
+- `editor` (string, optional): 
+- `env` (Mapping, optional): 
+- `require_save` (boolean, optional):  (default: False)
+- `extension` (string, optional):  (default: .txt)
+### editor_edit
+
+Edit
+
+Parameters:
+- `text` (string): 
+### editor_edit_files
+
+Edit files
+
+Parameters:
+- `filenames` (Iterable): 
+### file_convert
+
+Convert
+
+Parameters:
+- `value` (string): 
+- `param` (Parameter): 
+- `ctx` (Context): 
+### file_resolve_lazy_flag
+
+Resolve lazy flag
+
+Parameters:
+- `value` (string): 
+### file_shell_complete
+
+Return a special completion marker that tells the completion
+
+Parameters:
+- `ctx` (Context): Invocation context for this command.
+- `param` (Parameter): The parameter that is requesting completion.
+- `incomplete` (string): Value being completed. May be empty.
+### file_to_info_dict
+
+To info dict
+
+### fish_complete_format_completion
+
+Format completion
+
+Parameters:
+- `item` (CompletionItem): 
+### format_filename
+
+Format a filename as a string for display. Ensures the filename can be
+
+Parameters:
+- `filename` (string): formats a filename for UI display.  This will also convert
+- `shorten` (boolean, optional): this optionally shortens the filename to strip of the (default: False)
+### func_param_type_convert
+
+Convert
+
+Parameters:
+- `value` (Any): 
+- `param` (Parameter): 
+- `ctx` (Context): 
+### func_param_type_to_info_dict
+
+To info dict
+
+### get_app_dir
+
+Returns the config folder for the application.  The default behavior
+
+Parameters:
+- `app_name` (string): the application name.  This should be properly capitalized
+- `roaming` (boolean, optional): controls if the folder should be roaming or not on Windows. (default: True)
+- `force_posix` (boolean, optional): if this is set to `True` then on any POSIX system the (default: False)
+### get_best_encoding
+
+Returns the default stream encoding if not found.
+
+Parameters:
+- `stream` (IO): 
+### get_binary_stream
+
+Returns a system stream for byte processing.
+
+Parameters:
+- `name` (Literal): the name of the stream to open.  Valid names are ``'stdin'``,
+### get_completion_class
+
+Look up a registered :class:`ShellComplete` subclass by the name
+
+Parameters:
+- `shell` (string): Name the class is registered under.
+### get_current_context
+
+Get current context
+
+Parameters:
+- `silent` (Literal, optional):  (default: False)
+### get_text_stderr
+
+Get text stderr
+
+Parameters:
+- `encoding` (string, optional): 
+- `errors` (string, optional): 
+### get_text_stdin
+
+Get text stdin
+
+Parameters:
+- `encoding` (string, optional): 
+- `errors` (string, optional): 
+### get_text_stdout
+
+Get text stdout
+
+Parameters:
+- `encoding` (string, optional): 
+- `errors` (string, optional): 
+### get_text_stream
+
+Returns a system stream for text processing.  This usually returns
+
+Parameters:
+- `name` (Literal): the name of the stream to open.  Valid names are ``'stdin'``,
+- `encoding` (string, optional): overrides the detected default encoding.
+- `errors` (string, optional): overrides the default error mode. (default: strict)
+### getchar
+
+Fetches a single character from the terminal and returns it.  This
+
+Parameters:
+- `echo` (boolean, optional): if set to `True`, the character read will also show up on (default: False)
+### group
+
+Group
+
+Parameters:
+- `name` (_AnyCallable): 
+### group_add_command
+
+Registers another :class:`Command` with this group.  If the name
+
+Parameters:
+- `cmd` (Command): 
+- `name` (string, optional): 
+### group_collect_usage_pieces
+
+Collect usage pieces
+
+Parameters:
+- `ctx` (Context): 
+### group_command
+
+Command
+
+Parameters:
+- `__func` (Callable): 
+### group_format_commands
+
+Extra format methods for multi methods that adds all the commands
+
+Parameters:
+- `ctx` (Context): 
+- `formatter` (HelpFormatter): 
+### group_format_options
+
+Format options
+
+Parameters:
+- `ctx` (Context): 
+- `formatter` (HelpFormatter): 
+### group_get_command
+
+Given a context and a command name, this returns a :class:`Command`
+
+Parameters:
+- `ctx` (Context): 
+- `cmd_name` (string): 
+### group_group
+
+Group
+
+Parameters:
+- `__func` (Callable): 
+### group_list_commands
+
+Returns a list of subcommand names in the order they should appear.
+
+Parameters:
+- `ctx` (Context): 
+### group_resolve_command
+
+Resolve command
+
+Parameters:
+- `ctx` (Context): 
+- `args` (array): 
+### group_shell_complete
+
+Return a list of completions for the incomplete value. Looks
+
+Parameters:
+- `ctx` (Context): Invocation context for this command.
+- `incomplete` (string): Value being completed. May be empty.
+### group_to_info_dict
+
+To info dict
+
+Parameters:
+- `ctx` (Context): 
+### help_formatter_dedent
+
+Decreases the indentation.
+
+### help_formatter_getvalue
+
+Returns the buffer contents.
+
+### help_formatter_indent
+
+Increases the indentation.
+
+### help_formatter_indentation
+
+A context manager that increases the indentation.
+
+### help_formatter_section
+
+Helpful context manager that writes a paragraph, a heading,
+
+Parameters:
+- `name` (string): the section name that is written as heading.
+### help_formatter_write
+
+Writes a unicode string into the internal buffer.
+
+Parameters:
+- `string` (string): 
+### help_formatter_write_dl
+
+Writes a definition list into the buffer.  This is how options
+
+Parameters:
+- `rows` (Sequence): a list of two item tuples for the terms and values.
+- `col_max` (integer, optional): the maximum width of the first column. (default: 30)
+- `col_spacing` (integer, optional): the number of spaces between the first and (default: 2)
+### help_formatter_write_heading
+
+Writes a heading into the buffer.
+
+Parameters:
+- `heading` (string): 
+### help_formatter_write_paragraph
+
+Writes a paragraph into the buffer.
+
+### help_formatter_write_text
+
+Writes re-indented text into the buffer.  This rewraps and
+
+Parameters:
+- `text` (string): 
+### help_formatter_write_usage
+
+Writes a usage line into the buffer.
+
+Parameters:
+- `prog` (string): the program name.
+- `args` (string, optional): whitespace separated list of arguments.
+- `prefix` (string, optional): The prefix for the first line. Defaults to
+### help_option
+
+Pre-configured ``--help`` option which immediately prints the help page
+
+### hidden_prompt_func
+
+Hidden prompt func
+
+Parameters:
+- `prompt` (string): 
+### is_ascii_encoding
+
+Checks if a given encoding is ascii.
+
+Parameters:
+- `encoding` (string): 
+### isatty
+
+Isatty
+
+Parameters:
+- `stream` (IO): 
+### iter_params_for_processing
+
+Returns all declared parameters in the order they should be processed.
+
+Parameters:
+- `invocation_order` (Sequence): 
+- `declaration_order` (Sequence): 
+### iter_rows
+
+Iter rows
+
+Parameters:
+- `rows` (Iterable): 
+- `col_count` (integer): 
+### join_options
+
+Given a list of option strings this joins them in the most appropriate
+
+Parameters:
+- `options` (Sequence): 
+### launch
+
+This function launches the given URL (or filename) in the default
+
+Parameters:
+- `url` (string): URL or filename of the thing to launch.
+- `wait` (boolean, optional): Wait for the program to exit before returning. This (default: False)
+- `locate` (boolean, optional): if this is set to `True` then instead of launching the (default: False)
+### lazy_file_close
+
+Closes the underlying file, no matter what.
+
+### lazy_file_close_intelligently
+
+This function only closes the file if it was opened by the lazy
+
+### lazy_file_open
+
+Opens the file if it's not yet open.  This call might fail with
+
+### make_default_short_help
+
+Returns a condensed version of help string.
+
+Parameters:
+- `help` (string): 
+- `max_length` (integer, optional):  (default: 45)
+### make_input_stream
+
+Make input stream
+
+Parameters:
+- `input` (string): 
+- `charset` (string): 
+### make_str
+
+Converts a value into a valid string.
+
+Parameters:
+- `value` (Any): 
+### measure_table
+
+Measure table
+
+Parameters:
+- `rows` (Iterable): 
+### no_args_is_help_error_show
+
+Show
+
+Parameters:
+- `file` (IO, optional): 
+### open_file
+
+Open a file, with extra behavior to handle ``'-'`` to indicate
+
+Parameters:
+- `filename` (string): The name or Path of the file to open, or ``'-'`` for
+- `mode` (string, optional): The mode in which to open the file. (default: r)
+- `encoding` (string, optional): The encoding to decode or encode a file opened in
+- `errors` (string, optional): The error handling mode. (default: strict)
+- `lazy` (boolean, optional): Wait to open the file until it is accessed. For read (default: False)
+- `atomic` (boolean, optional): Write to a temporary file and replace the given file (default: False)
+### open_stream
+
+Open stream
+
+Parameters:
+- `filename` (string): 
+- `mode` (string, optional):  (default: r)
+- `encoding` (string, optional): 
+- `errors` (string, optional):  (default: strict)
+- `atomic` (boolean, optional):  (default: False)
+### option_add_to_parser
+
+Add to parser
+
+Parameters:
+- `parser` (_OptionParser): 
+- `ctx` (Context): 
+### option_consume_value
+
+For :class:`Option`, the value can be collected from an interactive prompt
+
+Parameters:
+- `ctx` (Context): 
+- `opts` (Mapping): 
+### option_get_error_hint
+
+Get error hint
+
+Parameters:
+- `ctx` (Context): 
+### option_get_help_extra
+
+Get help extra
+
+Parameters:
+- `ctx` (Context): 
+### option_process_value
+
+Process value
+
+Parameters:
+- `ctx` (Context): 
+- `value` (Any): 
+### option_prompt_for_value
+
+This is an alternative flow that can be activated in the full
+
+Parameters:
+- `ctx` (Context): 
+### option_resolve_envvar_value
+
+:class:`Option` resolves its environment variable the same way as
+
+Parameters:
+- `ctx` (Context): 
+### option_to_info_dict
+
+.. versionchanged:: 8.3.0
+
+### option_value_from_envvar
+
+For :class:`Option`, this method processes the raw environment variable
+
+Parameters:
+- `ctx` (Context): 
+### pager
+
+Decide what method to use for paging through text.
+
+Parameters:
+- `generator` (Iterable): 
+- `color` (boolean, optional): 
+### param_type_convert
+
+Convert the value to the correct type. This is not called if
+
+Parameters:
+- `value` (Any): The value to convert.
+- `param` (Parameter): The parameter that is using this type to convert
+- `ctx` (Context): The current context that arrived at this value. May
+### param_type_fail
+
+Helper method to fail with an invalid value message.
+
+Parameters:
+- `message` (string): 
+- `param` (Parameter, optional): 
+- `ctx` (Context, optional): 
+### param_type_get_metavar
+
+Returns the metavar default for this param if it provides one.
+
+Parameters:
+- `param` (Parameter): 
+- `ctx` (Context): 
+### param_type_get_missing_message
+
+Optionally might return extra information about a missing
+
+Parameters:
+- `param` (Parameter): 
+- `ctx` (Context): 
+### param_type_shell_complete
+
+Return a list of
+
+Parameters:
+- `ctx` (Context): Invocation context for this command.
+- `param` (Parameter): The parameter that is requesting completion.
+- `incomplete` (string): Value being completed. May be empty.
+### param_type_split_envvar_value
+
+Given a value from an environment variable this splits it up
+
+Parameters:
+- `rv` (string): 
+### param_type_to_info_dict
+
+Gather information that could be useful for a tool generating
+
+### parameter_add_to_parser
+
+Add to parser
+
+Parameters:
+- `parser` (_OptionParser): 
+- `ctx` (Context): 
+### parameter_consume_value
+
+Returns the parameter value produced by the parser.
+
+Parameters:
+- `ctx` (Context): 
+- `opts` (Mapping): 
+### parameter_get_default
+
+Get default
+
+Parameters:
+- `ctx` (Context): 
+- `call` (Literal, optional):  (default: True)
+### parameter_get_error_hint
+
+Get a stringified version of the param for use in error messages to
+
+Parameters:
+- `ctx` (Context): 
+### parameter_get_help_record
+
+Get help record
+
+Parameters:
+- `ctx` (Context): 
+### parameter_get_usage_pieces
+
+Get usage pieces
+
+Parameters:
+- `ctx` (Context): 
+### parameter_handle_parse_result
+
+Process the value produced by the parser from user input.
+
+Parameters:
+- `ctx` (Context): 
+- `opts` (Mapping): 
+- `args` (array): 
+### parameter_human_readable_name
+
+Returns the human readable name of this parameter.  This is the
+
+### parameter_make_metavar
+
+Make metavar
+
+Parameters:
+- `ctx` (Context): 
+### parameter_process_value
+
+Process the value of this parameter:
+
+Parameters:
+- `ctx` (Context): 
+- `value` (Any): 
+### parameter_resolve_envvar_value
+
+Returns the value found in the environment variable(s) attached to this
+
+Parameters:
+- `ctx` (Context): 
+### parameter_shell_complete
+
+Return a list of completions for the incomplete value. If a
+
+Parameters:
+- `ctx` (Context): Invocation context for this command.
+- `incomplete` (string): Value being completed. May be empty.
+### parameter_to_info_dict
+
+Gather information that could be useful for a tool generating
+
+### parameter_value_from_envvar
+
+Process the raw environment variable string for this parameter.
+
+Parameters:
+- `ctx` (Context): 
+### parameter_value_is_missing
+
+A value is considered missing if:
+
+Parameters:
+- `value` (Any): 
+### pass_context
+
+Marks a callback as wanting to receive the current context
+
+Parameters:
+- `f` (Callable): 
+### pass_obj
+
+Similar to :func:`pass_context`, but only pass the object on the
+
+Parameters:
+- `f` (Callable): 
+### password_option
+
+Add a ``--password`` option which prompts for a password, hiding
+
+### path_coerce_path_result
+
+Coerce path result
+
+Parameters:
+- `value` (string): 
+### path_convert
+
+Convert
+
+Parameters:
+- `value` (string): 
+- `param` (Parameter): 
+- `ctx` (Context): 
+### path_shell_complete
+
+Return a special completion marker that tells the completion
+
+Parameters:
+- `ctx` (Context): Invocation context for this command.
+- `param` (Parameter): The parameter that is requesting completion.
+- `incomplete` (string): Value being completed. May be empty.
+### path_to_info_dict
+
+To info dict
+
+### pause
+
+This command stops execution and waits for the user to press any
+
+Parameters:
+- `info` (string, optional): The message to print before pausing. Defaults to
+- `err` (boolean, optional): if set to message goes to ``stderr`` instead of (default: False)
+### pop_context
+
+Removes the top level from the stack.
+
+### progress_bar_eta
+
+Eta
+
+### progress_bar_generator
+
+Return a generator which yields the items added to the bar
+
+### progress_bar_make_step
+
+Make step
+
+Parameters:
+- `n_steps` (integer): 
+### progress_bar_pct
+
+Pct
+
+### progress_bar_time_per_iteration
+
+Time per iteration
+
+### progressbar
+
+Progressbar
+
+Parameters:
+- `length` (integer): 
+- `label` (string, optional): 
+- `hidden` (boolean, optional):  (default: False)
+- `show_eta` (boolean, optional):  (default: True)
+- `show_percent` (boolean, optional): 
+- `show_pos` (boolean, optional):  (default: False)
+- `fill_char` (string, optional):  (default: #)
+- `empty_char` (string, optional):  (default: -)
+- `bar_template` (string, optional):  (default: %(label)s  [%(bar)s]  %(info)s)
+- `info_sep` (string, optional):  (default:   )
+- `width` (integer, optional):  (default: 36)
+- `file` (TextIO, optional): 
+- `color` (boolean, optional): 
+- `update_min_steps` (integer, optional):  (default: 1)
+### push_context
+
+Pushes a new context to the current stack.
+
+Parameters:
+- `ctx` (Context): 
+### resolve_color_default
+
+Internal helper to get the default value of the color flag.  If a
+
+Parameters:
+- `color` (boolean, optional): 
+### result_output
+
+The terminal output as unicode string, as the user would see it.
+
+### result_stderr
+
+The standard error as unicode string.
+
+### result_stdout
+
+The standard output as unicode string.
+
+### safecall
+
+Wraps a function so that it swallows exceptions.
+
+Parameters:
+- `func` (Callable): 
+### secho
+
+This function combines :func:`echo` and :func:`style` into one
+
+Parameters:
+- `message` (Any, optional): 
+- `file` (IO, optional): 
+- `nl` (boolean, optional):  (default: True)
+- `err` (boolean, optional):  (default: False)
+- `color` (boolean, optional): 
+### shell_complete
+
+Perform shell completion for the given CLI program.
+
+Parameters:
+- `cli` (Command): Command being called.
+- `ctx_args` (MutableMapping): Extra arguments to pass to
+- `prog_name` (string): Name of the executable in the shell.
+- `complete_var` (string): Name of the environment variable that holds
+- `instruction` (string): Value of ``complete_var`` with the completion
+### shell_complete_complete
+
+Produce the completion data to send back to the shell.
+
+### shell_complete_format_completion
+
+Format a completion item into the form recognized by the
+
+Parameters:
+- `item` (CompletionItem): Completion item to format.
+### shell_complete_func_name
+
+The name of the shell function defined by the completion
+
 
 ## Available Resources
 
 - `app://click/status` — Current status and version of click
 - `app://click/commands` — Available commands and tools in click
+- `app://click/config` — Current configuration of click
 - `docs://click/tool-index` — Complete index of all click tools with parameters and usage
 - `docs://click/argument` — Documentation for click argument capabilities
 - `docs://click/bash_complete` — Documentation for click bash_complete capabilities

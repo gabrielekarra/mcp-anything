@@ -105,11 +105,6 @@ class TestToolRegistration:
         # Tool registration is verified by import
         pass
 
-    def test_ffmpeg_prores_encoder_avoptions_registered(self, server):
-        """ffmpeg_prores_encoder_avoptions tool should be registered."""
-        # Tool registration is verified by import
-        pass
-
     def test_ffmpeg_roq_avoptions_registered(self, server):
         """ffmpeg_roq_avoptions tool should be registered."""
         # Tool registration is verified by import
@@ -497,21 +492,6 @@ class TestToolRegistration:
 
     def test_ffmpeg_swresampler_avoptions_registered(self, server):
         """ffmpeg_swresampler_avoptions tool should be registered."""
-        # Tool registration is verified by import
-        pass
-
-    def test_ffmpeg_swresampler_avoptions_registered(self, server):
-        """ffmpeg_swresampler_avoptions tool should be registered."""
-        # Tool registration is verified by import
-        pass
-
-    def test_ffmpeg_swscaler_avoptions_registered(self, server):
-        """ffmpeg_swscaler_avoptions tool should be registered."""
-        # Tool registration is verified by import
-        pass
-
-    def test_ffmpeg_swscaler_avoptions_registered(self, server):
-        """ffmpeg_swscaler_avoptions tool should be registered."""
         # Tool registration is verified by import
         pass
 

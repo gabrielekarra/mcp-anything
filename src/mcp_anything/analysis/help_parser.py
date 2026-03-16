@@ -184,8 +184,12 @@ def _section_to_capability(
     tool_name = f"{app_name.replace('-', '_')}_{section_slug}"
 
     params = []
+    seen_params: set[str] = set()
     for flag, value_hint, desc in options:
         param_name = flag.replace("-", "_")
+        if param_name in seen_params:
+            continue  # Skip duplicate params within the same section
+        seen_params.add(param_name)
         param_type = "boolean"
         if value_hint:
             type_map = {

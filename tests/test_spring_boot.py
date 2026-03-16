@@ -278,7 +278,7 @@ class TestSpringBootCodegen:
         emitter = Emitter(spring_design, tmp_path)
         emitter.emit_all()
 
-        backend_path = tmp_path / "src" / "demo_api" / "backend.py"
+        backend_path = tmp_path / "src" / "mcp_demo_api" / "backend.py"
         assert backend_path.exists()
         content = backend_path.read_text()
         assert "httpx" in content
@@ -289,7 +289,7 @@ class TestSpringBootCodegen:
         emitter = Emitter(spring_design, tmp_path)
         emitter.emit_all()
 
-        tool_path = tmp_path / "src" / "demo_api" / "tools" / "api.py"
+        tool_path = tmp_path / "src" / "mcp_demo_api" / "tools" / "api.py"
         assert tool_path.exists()
         content = tool_path.read_text()
         assert "backend.request" in content

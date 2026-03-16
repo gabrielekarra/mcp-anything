@@ -12,10 +12,10 @@ dependencies = [
 ]
 
 [project.scripts]
-mcp-httpstat = "httpstat.server:main"
+mcp-httpstat = "mcp_httpstat.server:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/httpstat"]
+packages = ["src/mcp_httpstat"]
 
 # NOTE: This MCP server calls into the target application.
 # You must also install the target project's dependencies:

@@ -105,8 +105,8 @@ def _build_tool_impl(cap: Capability, ipc_type: Optional[IPCType]) -> ToolImpl:
             else:
                 arg_mapping[p.name] = {"style": "flag", "flag": f"--{p.name.replace('_', '-')}"}
 
-        if ipc_type == IPCType.PYTHON_API or ipc_type is None:
-            # Direct Python import + call
+        # Class methods ALWAYS use python_call — they need direct import
+        if cap.source_class or ipc_type == IPCType.PYTHON_API or ipc_type is None:
             module_path = cap.source_file.replace("/", ".").removesuffix(".py")
             return ToolImpl(
                 strategy="python_call",
@@ -114,6 +114,7 @@ def _build_tool_impl(cap: Capability, ipc_type: Optional[IPCType]) -> ToolImpl:
                 python_function=cap.source_function,
                 python_import_path=cap.source_file,
                 python_class=cap.source_class,
+                python_init_params=cap.init_params,
                 arg_mapping=arg_mapping,
             )
         elif ipc_type == IPCType.CLI:
@@ -205,6 +206,10 @@ def _build_backend_config(analysis: AnalysisResult, codebase_path: str = "") -> 
     """Create backend configuration from analysis results."""
     ipc_type = analysis.primary_ipc
     if not ipc_type:
+        # Still need a backend config if we have class methods (python_call needs codebase_path)
+        has_class_methods = any(cap.source_class for cap in analysis.capabilities)
+        if has_class_methods:
+            return BackendConfig(backend_type=IPCType.PYTHON_API, codebase_path=codebase_path)
         return None
 
     config = BackendConfig(backend_type=ipc_type, codebase_path=codebase_path)
@@ -510,13 +515,19 @@ class DesignPhase(Phase):
         assert analysis is not None
         console = ctx.console
 
-        # Convert capabilities to tool specs
-        tools = [_capability_to_tool(cap, analysis.primary_ipc) for cap in analysis.capabilities]
+        # Convert capabilities to tool specs, deduplicating by name
+        tools: list[ToolSpec] = []
+        seen_names: set[str] = set()
+        for cap in analysis.capabilities:
+            tool = _capability_to_tool(cap, analysis.primary_ipc)
+            if tool.name not in seen_names:
+                tools.append(tool)
+                seen_names.add(tool.name)
 
         # Add a generic "run" tool for all CLI apps — always the most useful tool
         if analysis.primary_ipc == IPCType.CLI:
             run_tool = _make_run_cli_tool(analysis)
-            if run_tool:
+            if run_tool and run_tool.name not in seen_names:
                 tools.insert(0, run_tool)
 
         console.print(f"    Designed {len(tools)} tools")

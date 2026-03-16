@@ -6,5 +6,5 @@ import pytest
 @pytest.fixture
 def server():
     """Create a test server instance."""
-    from click.server import server
+    from mcp_click.server import server
     return server

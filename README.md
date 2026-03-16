@@ -48,15 +48,12 @@ MCP servers auto-generated from real software — tested end-to-end.
 
 | Software | What it is | Generated tools | Works? | Time |
 |----------|-----------|----------------|--------|------|
-| **ffmpeg** | Video/audio processing | 102 tools | Yes — executes real ffmpeg commands | ~2s |
+| **ffmpeg** | Video/audio processing | 98 tools | Yes — executes real ffmpeg commands | ~2s |
 | **httpstat** | HTTP timing visualizer | 2 tools | Yes — makes real HTTP requests | ~2s |
-| **yt-dlp** | Video downloader | 200 tools | Scaffolded | ~8s |
-| **click** | CLI framework | 50 tools | Scaffolded | ~3s |
+| **click** | CLI framework | 201 tools | Yes — auto-instantiates classes, calls methods | ~3s |
+| **ImageMagick** | Image processing (Wand) | 200 tools | Yes — auto-instantiates Image objects | ~4s |
 
 **"Works"** = generate, install, call a tool, get real output. No manual editing.
-**"Scaffolded"** = correct tool schemas and server structure, but instance method wiring needs manual completion.
-
-Best results today: **CLI tools** and **REST APIs**. These produce fully functional servers out of the box.
 
 See [`examples/`](examples/) for the full generated code and test results.
 
@@ -156,10 +153,10 @@ mcp-anything status ./mcp-myapp-server
 
 | Project | Type | Tools | Status |
 |---------|------|-------|--------|
-| [ffmpeg](https://ffmpeg.org/) | Desktop CLI (video/audio) | 102 | Working end-to-end |
+| [ffmpeg](https://ffmpeg.org/) | Desktop CLI (video/audio) | 98 | Working end-to-end |
 | [httpstat](https://github.com/reorx/httpstat) | Python CLI (HTTP timing) | 2 | Working end-to-end |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Python library (video downloader) | 200 | Scaffolded |
-| [click](https://github.com/pallets/click) | Python library (CLI framework) | 50 | Scaffolded |
+| [click](https://github.com/pallets/click) | Python library (CLI framework) | 201 | Working end-to-end |
+| [ImageMagick](https://docs.wand-py.org/) | Image processing (Wand) | 200 | Working end-to-end |
 
 See [`examples/`](examples/) for full details, generated code, and test results.
 

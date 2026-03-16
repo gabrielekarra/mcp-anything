@@ -5,18 +5,15 @@ build-backend = "hatchling.build"
 [project]
 name = "mcp-click-server"
 version = "0.1.0"
-description = "MCP server for click (CLI application, with 50 capabilities)"
+description = "MCP server for click (CLI application, with 200 capabilities)"
 requires-python = ">=3.10"
 dependencies = [
     "mcp>=1.0",
 ]
 
 [project.scripts]
-mcp-click = "click.server:main"
+mcp-click = "mcp_click.server:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/click"]
+packages = ["src/mcp_click"]
 
-# NOTE: This MCP server calls into the target application.
-# You must also install the target project's dependencies:
-#   pip install -e /tmp/click

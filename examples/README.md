@@ -29,8 +29,6 @@ run_httpstat(args="https://httpbin.org/get")
 → DNS Lookup: 63ms | TCP Connection: 197ms | TLS Handshake: 431ms | ...
 ```
 
-**mcp.json:** `{ "mcpServers": { "httpstat": { "command": "mcp-httpstat" } } }`
-
 **Output:** [`httpstat-server/`](httpstat-server/)
 
 ---
@@ -45,15 +43,15 @@ ffmpeg --help full > /tmp/ffmpeg-src/help.txt
 mcp-anything generate /tmp/ffmpeg-src --name ffmpeg --no-llm
 ```
 
-**What was detected:** 101 option groups from help text (14,159 lines parsed)
+**What was detected:** 97 option groups from help text (14,159 lines parsed)
 
-**Generated tools (102):**
+**Generated tools (98):**
 | Tool | Strategy | Works? |
 |------|----------|--------|
 | `run_ffmpeg` | `cli_subcommand` — executes `ffmpeg <args>` | Yes |
 | `ffmpeg_video_options` | `cli_subcommand` — builds `-r 24 -s 1920x1080` flags | Yes |
 | `ffmpeg_audio_options` | `cli_subcommand` — builds `-ar 44100 -ac 2` flags | Yes |
-| ... 99 more section tools | `cli_subcommand` — each builds proper CLI flags | Yes |
+| ... 95 more section tools | `cli_subcommand` — each builds proper CLI flags | Yes |
 
 **Verified:**
 ```
@@ -62,39 +60,35 @@ run_ffmpeg(args="-formats") → 401 lines of supported formats
 run_ffmpeg(args="-codecs")  → 497 lines of supported codecs
 ```
 
-**mcp.json:** `{ "mcpServers": { "ffmpeg": { "command": "mcp-ffmpeg" } } }`
-
 **Output:** [`ffmpeg-server/`](ffmpeg-server/)
 
 ---
 
-## Scaffolded (tools generated, need wiring for full functionality)
-
-These examples generate correct tool schemas and server structure, but the tools for class instance methods need manual wiring to work at runtime.
-
 ### click
 
-**Source:** [pallets/click](https://github.com/pallets/click) — Python CLI framework. 18 source files, 129 functions, 71 classes.
+**Source:** [pallets/click](https://github.com/pallets/click) — Python CLI framework. 17 source files, 129 functions, 71 classes.
 
-**Generated tools (50):** Auto-grouped by class (command, choice, cli_runner, etc.). Tools for standalone functions work; tools for instance methods return a description of how to call them.
+**Generated tools (201):** Auto-grouped by class (command, choice, context, help_formatter, etc.). Instance methods are auto-instantiated at runtime — no manual wiring needed.
+
+**Verified:**
+```
+help_formatter_write(string="Hello World") → OK
+help_formatter_getvalue() → "Hello World"   # cached instance keeps state
+```
 
 **Output:** [`click-server/`](click-server/)
+
+---
 
 ### ImageMagick (via Wand)
 
 **Source:** [Wand](https://docs.wand-py.org/) — Python bindings for ImageMagick. 23 source files, 103 classes.
 
-**Generated tools (50):** Image operations (blur, resize, crop, etc.). These are instance methods on `Image` — they need an `Image` object to operate on, which the auto-generated wiring doesn't handle yet.
+**Generated tools (200):** Image operations (blur, resize, crop, annotate, etc.). Instance methods on `BaseImage` and other classes are auto-instantiated at runtime.
+
+**Note:** Requires ImageMagick native library installed (`libmagickwand-dev`) for the tools to execute.
 
 **Output:** [`imagemagick-server/`](imagemagick-server/)
-
-### yt-dlp
-
-**Source:** [yt-dlp](https://github.com/yt-dlp/yt-dlp) — video downloader. 1,111 source files, 4,578 classes.
-
-**Generated tools (200):** Mix of standalone utility functions and site-specific extractor methods. Utility functions work; extractor methods need instances.
-
-**Output:** [`yt-dlp-server/`](yt-dlp-server/)
 
 ---
 
@@ -105,6 +99,4 @@ pip install mcp-anything
 mcp-anything generate /path/to/any/project --name my-project
 ```
 
-**Best results with:** CLI tools (argparse, Click, Typer), REST APIs (FastAPI, Flask, Spring Boot), OpenAPI specs. These produce fully working servers out of the box.
-
-**Scaffolded results with:** Python libraries with complex class hierarchies. The tool schemas and server structure are correct, but instance method invocations may need manual wiring.
+**Works with:** CLI tools (argparse, Click, Typer), REST APIs (FastAPI, Flask, Spring Boot), OpenAPI specs, Python libraries with classes. All produce fully working servers out of the box.

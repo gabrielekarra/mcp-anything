@@ -12,8 +12,8 @@ dependencies = [
 ]
 
 [project.scripts]
-mcp-ffmpeg = "ffmpeg.server:main"
+mcp-ffmpeg = "mcp_ffmpeg.server:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ffmpeg"]
+packages = ["src/mcp_ffmpeg"]
 

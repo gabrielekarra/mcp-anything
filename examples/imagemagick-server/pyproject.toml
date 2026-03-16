@@ -5,15 +5,15 @@ build-backend = "hatchling.build"
 [project]
 name = "mcp-imagemagick-server"
 version = "0.1.0"
-description = "MCP server for imagemagick (with 50 capabilities)"
+description = "MCP server for imagemagick (with 200 capabilities)"
 requires-python = ">=3.10"
 dependencies = [
     "mcp>=1.0",
 ]
 
 [project.scripts]
-mcp-imagemagick = "imagemagick.server:main"
+mcp-imagemagick = "mcp_imagemagick.server:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/imagemagick"]
+packages = ["src/mcp_imagemagick"]
 
