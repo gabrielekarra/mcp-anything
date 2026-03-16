@@ -1,4 +1,4 @@
-"""Tests for Spring Boot support — detector, analyzer, and codegen."""
+"""Tests for Spring Boot and Spring MVC support — detector, analyzer, and codegen."""
 
 import ast
 from pathlib import Path
@@ -17,7 +17,9 @@ from mcp_anything.models.analysis import FileInfo, IPCType, Language, ParameterS
 from mcp_anything.models.design import BackendConfig, ResourceSpec, ServerDesign, ToolImpl, ToolSpec
 
 
-class TestSpringDetector:
+class TestSpringBootDetector:
+    """Tests for Spring Boot application detection."""
+
     def test_detects_spring_boot(self, fake_spring_app):
         files = scan_codebase(fake_spring_app)
         detector = SpringDetector()
@@ -52,6 +54,98 @@ class TestSpringDetector:
         detector = SpringDetector()
         mechanisms = detector.detect(fake_cli_app, files)
         assert mechanisms == []
+
+
+class TestSpringMVCDetector:
+    """Tests for plain Spring MVC detection (no Spring Boot)."""
+
+    def test_detects_spring_mvc(self, fake_spring_mvc_app):
+        files = scan_codebase(fake_spring_mvc_app)
+        detector = SpringDetector()
+        mechanisms = detector.detect(fake_spring_mvc_app, files)
+
+        assert len(mechanisms) == 1
+        mech = mechanisms[0]
+        assert mech.ipc_type == IPCType.PROTOCOL
+        assert mech.confidence >= 0.85
+        assert mech.details["protocol"] == "http"
+        assert mech.details["framework"] == "spring-mvc"
+
+    def test_spring_mvc_has_no_boot_evidence(self, fake_spring_mvc_app):
+        files = scan_codebase(fake_spring_mvc_app)
+        detector = SpringDetector()
+        mechanisms = detector.detect(fake_spring_mvc_app, files)
+
+        evidence_text = " ".join(mechanisms[0].evidence)
+        assert "Spring Boot" not in evidence_text
+
+    def test_spring_mvc_default_port(self, fake_spring_mvc_app):
+        files = scan_codebase(fake_spring_mvc_app)
+        detector = SpringDetector()
+        mechanisms = detector.detect(fake_spring_mvc_app, files)
+
+        assert mechanisms[0].details["port"] == "8080"
+
+
+class TestSpringMVCAnalyzer:
+    """Tests for analyzing plain Spring MVC controllers."""
+
+    def test_finds_mvc_endpoints(self, fake_spring_mvc_app):
+        fi = FileInfo(
+            path="src/main/java/com/example/web/ProductController.java",
+            language=Language.JAVA,
+            size_bytes=500,
+            line_count=30,
+        )
+        result = analyze_java_file(fake_spring_mvc_app, fi)
+
+        assert result is not None
+        assert len(result.endpoints) >= 4
+        assert "ProductController" in result.controllers
+        assert result.has_spring_boot is False
+
+    def test_mvc_extracts_http_methods(self, fake_spring_mvc_app):
+        fi = FileInfo(
+            path="src/main/java/com/example/web/ProductController.java",
+            language=Language.JAVA,
+            size_bytes=500,
+            line_count=30,
+        )
+        result = analyze_java_file(fake_spring_mvc_app, fi)
+
+        methods = {ep.http_method for ep in result.endpoints}
+        assert "GET" in methods
+        assert "POST" in methods
+        assert "DELETE" in methods
+
+    def test_mvc_extracts_paths(self, fake_spring_mvc_app):
+        fi = FileInfo(
+            path="src/main/java/com/example/web/ProductController.java",
+            language=Language.JAVA,
+            size_bytes=500,
+            line_count=30,
+        )
+        result = analyze_java_file(fake_spring_mvc_app, fi)
+
+        paths = {ep.path for ep in result.endpoints}
+        assert "/api/products" in paths
+        assert "/api/products/{id}" in paths
+
+    def test_mvc_endpoints_become_capabilities(self, fake_spring_mvc_app):
+        fi = FileInfo(
+            path="src/main/java/com/example/web/ProductController.java",
+            language=Language.JAVA,
+            size_bytes=500,
+            line_count=30,
+        )
+        result = analyze_java_file(fake_spring_mvc_app, fi)
+        caps = java_results_to_capabilities({fi.path: result})
+
+        assert len(caps) >= 4
+        cap_names = [c.name for c in caps]
+        assert any("get" in n and "products" in n for n in cap_names)
+        assert any("post" in n and "products" in n for n in cap_names)
+        assert any("delete" in n and "products" in n for n in cap_names)
 
 
 class TestJavaAnalyzer:

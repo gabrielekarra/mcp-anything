@@ -1,4 +1,4 @@
-"""Regex-based Java source analyzer for Spring Boot endpoints.
+"""Regex-based Java source analyzer for Spring Boot and Spring MVC endpoints.
 
 Extracts REST controller methods, path mappings, request parameters,
 path variables, and request bodies from Java source files.
@@ -14,7 +14,7 @@ from mcp_anything.models.analysis import Capability, FileInfo, IPCType, Language
 
 @dataclass
 class SpringEndpoint:
-    """A REST endpoint extracted from a Spring Boot controller."""
+    """A REST endpoint extracted from a Spring controller."""
 
     http_method: str  # GET, POST, PUT, DELETE, PATCH
     path: str
@@ -29,7 +29,7 @@ class SpringEndpoint:
 
 @dataclass
 class JavaAnalysisResult:
-    """Result of analyzing Java source files for Spring Boot patterns."""
+    """Result of analyzing Java source files for Spring patterns."""
 
     endpoints: list[SpringEndpoint] = field(default_factory=list)
     controllers: list[str] = field(default_factory=list)
@@ -217,7 +217,7 @@ def _extract_balanced_parens(source: str, start: int) -> str:
 
 
 def analyze_java_file(root: Path, file_info: FileInfo) -> Optional[JavaAnalysisResult]:
-    """Analyze a single Java file for Spring Boot REST endpoints."""
+    """Analyze a single Java file for Spring REST endpoints."""
     if file_info.language != Language.JAVA:
         return None
 

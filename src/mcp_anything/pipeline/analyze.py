@@ -123,7 +123,7 @@ class AnalyzePhase(Phase):
             f"{cli_count} CLI commands, {subcmd_count} subcommands"
         )
 
-        # 3a. Java/Spring Boot analysis
+        # 3a. Java/Spring analysis
         java_results = {}
         for fi in files:
             if fi.language == Language.JAVA:
