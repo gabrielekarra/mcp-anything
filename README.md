@@ -7,6 +7,7 @@ Not just REST APIs. Not just OpenAPI specs. Any software — CLI tools, desktop 
 [![Discord](https://img.shields.io/badge/Discord-Join%20us-7289da?logo=discord&logoColor=white)](https://discord.gg/5zCwnfJBxG)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![PyPI](https://img.shields.io/pypi/v/mcp-anything.svg)](https://pypi.org/project/mcp-anything/)
 
 ![mcp-anything demo](promo.gif)
 
