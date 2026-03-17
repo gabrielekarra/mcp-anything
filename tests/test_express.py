@@ -71,6 +71,50 @@ class TestExpressAnalyzer:
                         assert id_params[0].required
         assert has_path_param
 
+    def test_finds_routing_controllers_routes(self, tmp_path):
+        controller = tmp_path / "src" / "api" / "controllers" / "UserController.ts"
+        controller.parent.mkdir(parents=True)
+        controller.write_text(
+            """
+import { Body, Get, JsonController, Param, Post } from 'routing-controllers';
+
+class CreateUserBody {
+    public email: string;
+}
+
+@JsonController('/users')
+export class UserController {
+    @Get('/:id')
+    public one(@Param('id') id: string) {
+        return { id };
+    }
+
+    @Post()
+    public create(@Body() body: CreateUserBody) {
+        return body;
+    }
+}
+"""
+        )
+
+        files = scan_codebase(tmp_path)
+        results = {}
+        for fi in files:
+            result = analyze_express_file(tmp_path, fi)
+            if result and result.routes:
+                results[fi.path] = result
+
+        all_routes = [route for result in results.values() for route in result.routes]
+        paths = {route.path for route in all_routes}
+        assert "/users/{id}" in paths
+        assert "/users" in paths
+
+        get_by_id = next(route for route in all_routes if route.path == "/users/{id}")
+        assert any(param.name == "id" and param.required for param in get_by_id.parameters)
+
+        post_users = next(route for route in all_routes if route.path == "/users")
+        assert any(param.name == "body" and param.type == "object" for param in post_users.parameters)
+
 
 class TestExpressCapabilities:
     def test_endpoints_become_capabilities(self, fake_express_app):

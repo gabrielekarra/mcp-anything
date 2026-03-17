@@ -158,12 +158,12 @@ def register_tools(server: FastMCP{% if design.backend %}, backend{% endif %}{% 
         # HTTP {{ tool.impl.http_method }} {{ tool.impl.http_path }}
         path_params: dict[str, str] = {}
         query_params: dict[str, str] = {}
-        body: dict | None = None
+        request_body: dict | None = None
         {% for param in tool.parameters %}
         {% if tool.impl.arg_mapping.get(param.name, {}).get("style") == "path" %}
         path_params["{{ param.name }}"] = str({{ param.name | safe_identifier }})
         {% elif tool.impl.arg_mapping.get(param.name, {}).get("style") == "body" %}
-        body = {{ param.name | safe_identifier }} if isinstance({{ param.name | safe_identifier }}, dict) else {"data": {{ param.name | safe_identifier }}}
+        request_body = {{ param.name | safe_identifier }} if isinstance({{ param.name | safe_identifier }}, dict) else {"data": {{ param.name | safe_identifier }}}
         {% else %}
         if {{ param.name | safe_identifier }} is not None:
             query_params["{{ param.name }}"] = str({{ param.name | safe_identifier }})
@@ -174,7 +174,7 @@ def register_tools(server: FastMCP{% if design.backend %}, backend{% endif %}{% 
                 "{{ tool.impl.http_method }}",
                 "{{ tool.impl.http_path }}",
                 params=query_params or None,
-                body=body,
+                body=request_body,
                 path_params=path_params or None,
             )
         except BackendError as exc:

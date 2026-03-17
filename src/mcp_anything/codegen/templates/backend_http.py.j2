@@ -217,6 +217,14 @@ class Backend:
         # Should not reach here, but just in case
         raise last_error or BackendError(f"Request failed after {self.max_retries} attempts")
 
+    async def execute(self, method: str, **kwargs: Any) -> str:
+        """Compatibility shim for scaffolded protocol-style tools on HTTP backends."""
+        raise BackendError(
+            f"HTTP backend for {{ design.server_name }} has no protocol mapping for '{method}'. "
+            "Generate concrete HTTP routes or implement Backend.execute() manually.",
+            method=method,
+        )
+
     async def query(self, uri: str) -> str:
         """Query a resource by URI."""
-        return await self.request("GET", "/")
+        return await self.execute("query", uri=uri)

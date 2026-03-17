@@ -151,6 +151,23 @@ _TS_TYPE_MAP = {
     "boolean": "boolean",
 }
 
+# routing-controllers decorators
+_RC_JSON_CONTROLLER_RE = re.compile(r"@JsonController\s*\(\s*['\"]([^'\"]*)['\"]\s*\)")
+_RC_METHOD_RE = re.compile(
+    r"((?:\s*@[\w$]+(?:\([^)]*\))?\s*)+)\s*public\s+(\w+)\s*\((.*?)\)\s*(?::\s*[^{]+)?\{",
+    re.DOTALL,
+)
+_RC_HTTP_DECORATOR_RE = re.compile(
+    r"@(Get|Post|Put|Delete|Patch)\s*(?:\(\s*['\"]([^'\"]*)['\"]\s*\))?",
+    re.IGNORECASE,
+)
+_RC_PARAM_RE = re.compile(r"@Param\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\s*(\w+)(?:\s*:\s*([^=]+))?")
+_RC_BODY_RE = re.compile(r"@Body(?:\s*\([^)]*\))?\s*(\w+)(?:\s*:\s*([^=]+))?")
+_RC_QUERY_PARAM_RE = re.compile(
+    r"@QueryParam\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\s*(\w+)(?:\s*:\s*([^=]+))?"
+)
+_RC_QUERY_PARAMS_RE = re.compile(r"@QueryParams(?:\s*\([^)]*\))?\s*(\w+)(?:\s*:\s*([^=]+))?")
+
 
 def _resolve_ts_types(context: str) -> dict[str, str]:
     """Scan handler context for TypeScript type hints. Returns {param_name: mcp_type}."""
@@ -250,6 +267,185 @@ def _extract_path_params(path: str) -> list[ParameterSpec]:
     return params
 
 
+def _extract_balanced_block(source: str, open_brace_index: int) -> str:
+    """Return the text inside a balanced {...} block starting at open_brace_index."""
+    depth = 0
+    start = open_brace_index + 1
+    for idx in range(open_brace_index, len(source)):
+        char = source[idx]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start:idx]
+    return source[start:]
+
+
+def _split_ts_params(signature: str) -> list[str]:
+    """Split a TypeScript parameter list on top-level commas."""
+    parts: list[str] = []
+    current: list[str] = []
+    depth_angle = depth_round = depth_curly = depth_square = 0
+    for char in signature:
+        if char == "<":
+            depth_angle += 1
+        elif char == ">":
+            depth_angle = max(0, depth_angle - 1)
+        elif char == "(":
+            depth_round += 1
+        elif char == ")":
+            depth_round = max(0, depth_round - 1)
+        elif char == "{":
+            depth_curly += 1
+        elif char == "}":
+            depth_curly = max(0, depth_curly - 1)
+        elif char == "[":
+            depth_square += 1
+        elif char == "]":
+            depth_square = max(0, depth_square - 1)
+
+        if (
+            char == ","
+            and depth_angle == 0
+            and depth_round == 0
+            and depth_curly == 0
+            and depth_square == 0
+        ):
+            part = "".join(current).strip()
+            if part:
+                parts.append(part)
+            current = []
+            continue
+        current.append(char)
+
+    tail = "".join(current).strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def _normalize_ts_type(type_name: str | None) -> str:
+    """Map a TypeScript type annotation to an MCP parameter type."""
+    if not type_name:
+        return "string"
+    cleaned = type_name.strip()
+    cleaned = cleaned.split("=")[0].strip()
+    cleaned = cleaned.removeprefix("Promise<").removesuffix(">")
+    cleaned = cleaned.replace("| undefined", "").replace("| null", "").strip()
+    bare = cleaned.split(".")[-1].strip()
+    if bare.endswith("[]"):
+        return "array"
+    lowered = bare.lower()
+    if lowered in _TS_TYPE_MAP:
+        return _TS_TYPE_MAP[lowered]
+    return "object"
+
+
+def _extract_routing_controller_params(signature: str) -> list[ParameterSpec]:
+    """Extract params from a routing-controllers method signature."""
+    params: list[ParameterSpec] = []
+    seen: set[str] = set()
+
+    for part in _split_ts_params(signature):
+        part = " ".join(part.split())
+        if not part:
+            continue
+
+        param_match = _RC_PARAM_RE.search(part)
+        if param_match:
+            route_name, var_name, type_name = param_match.groups()
+            if route_name not in seen:
+                seen.add(route_name)
+                params.append(
+                    ParameterSpec(
+                        name=route_name or var_name,
+                        type=_normalize_ts_type(type_name),
+                        required=True,
+                    )
+                )
+            continue
+
+        body_match = _RC_BODY_RE.search(part)
+        if body_match:
+            var_name, _type_name = body_match.groups()
+            if var_name not in seen:
+                seen.add(var_name)
+                params.append(ParameterSpec(name=var_name, type="object", required=True))
+            continue
+
+        query_match = _RC_QUERY_PARAM_RE.search(part)
+        if query_match:
+            query_name, var_name, type_name = query_match.groups()
+            if query_name not in seen:
+                seen.add(query_name)
+                params.append(
+                    ParameterSpec(
+                        name=query_name or var_name,
+                        type=_normalize_ts_type(type_name),
+                        required=False,
+                    )
+                )
+            continue
+
+        query_params_match = _RC_QUERY_PARAMS_RE.search(part)
+        if query_params_match:
+            var_name, _type_name = query_params_match.groups()
+            if var_name not in seen:
+                seen.add(var_name)
+                params.append(ParameterSpec(name=var_name, type="object", required=False))
+
+    return params
+
+
+def _extract_routing_controller_routes(
+    source: str,
+    file_info: FileInfo,
+) -> list[ExpressEndpoint]:
+    """Extract routes from routing-controllers class decorators."""
+    routes: list[ExpressEndpoint] = []
+    for class_match in re.finditer(r"(?:export\s+)?class\s+(\w+)\s*\{", source):
+        class_start = class_match.start()
+        class_header = source[max(0, class_start - 500):class_start]
+        controller_matches = list(_RC_JSON_CONTROLLER_RE.finditer(class_header))
+        if not controller_matches:
+            continue
+
+        base_path = controller_matches[-1].group(1).rstrip("/")
+        body = _extract_balanced_block(source, class_match.end() - 1)
+
+        for method_match in _RC_METHOD_RE.finditer(body):
+            decorators = method_match.group(1)
+            function_name = method_match.group(2)
+            signature = method_match.group(3)
+
+            http_match = _RC_HTTP_DECORATOR_RE.search(decorators)
+            if not http_match:
+                continue
+
+            http_method = http_match.group(1).upper()
+            sub_path = (http_match.group(2) or "").strip()
+            route_path = f"{base_path}{sub_path}" if sub_path else (base_path or "/")
+            if not route_path.startswith("/"):
+                route_path = "/" + route_path
+
+            normalized = normalize_path(route_path)
+            params = _extract_routing_controller_params(signature)
+
+            routes.append(
+                ExpressEndpoint(
+                    http_method=http_method,
+                    path=normalized,
+                    function_name=function_name,
+                    description=make_description(function_name),
+                    parameters=params,
+                    source_file=file_info.path,
+                )
+            )
+
+    return routes
+
+
 def build_router_mount_map(root: Path, files: list[FileInfo]) -> dict[str, str]:
     """Scan all JS/TS files to build a map of file path → mount prefix.
 
@@ -311,8 +507,14 @@ def analyze_express_file(
     except OSError:
         return None
 
-    # Must have express reference
-    if not re.search(r"express|require\s*\(\s*['\"]express['\"]|from\s+['\"]express['\"]", source):
+    has_express_reference = re.search(
+        r"express|require\s*\(\s*['\"]express['\"]|from\s+['\"]express['\"]",
+        source,
+    )
+    has_routing_controllers = "routing-controllers" in source or "@JsonController" in source
+
+    # Must have express reference or routing-controllers decorators
+    if not has_express_reference and not has_routing_controllers:
         # Could be a router file — check for Router()
         if "Router()" not in source and "router." not in source:
             return None
@@ -434,6 +636,10 @@ def analyze_express_file(
             source_file=file_info.path,
         )
         result.routes.append(endpoint)
+
+    # routing-controllers class decorators are common in TypeScript Express apps
+    if is_typescript and ("JsonController" in source or "routing-controllers" in source):
+        result.routes.extend(_extract_routing_controller_routes(source, file_info))
 
     return result if result.routes else None
 

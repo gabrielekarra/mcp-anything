@@ -268,6 +268,34 @@ class TestEmitter:
         server_cfg = config["mcpServers"]["test-app"]
         assert server_cfg["env"]["TEST_APP_BASE_URL"] == "http://api.internal:9000"
 
+    def test_http_tool_module_does_not_shadow_body_param(self, tmp_path):
+        design = ServerDesign(
+            server_name="test-app",
+            tools=[
+                ToolSpec(
+                    name="post_items",
+                    description="Create item",
+                    module="api",
+                    parameters=[ParameterSpec(name="body", type="object", description="Request body")],
+                    impl=ToolImpl(
+                        strategy="http_call",
+                        http_method="POST",
+                        http_path="/items",
+                        arg_mapping={"body": {"style": "body"}},
+                    ),
+                )
+            ],
+            tool_modules={"api": ["post_items"]},
+            backend=BackendConfig(backend_type=IPCType.PROTOCOL, host="localhost", port=8080),
+        )
+
+        emitter = Emitter(design, tmp_path)
+        emitter.emit_all()
+
+        module = (tmp_path / "src" / "mcp_test_app" / "tools" / "api.py").read_text()
+        assert "request_body: dict | None = None" in module
+        assert "body=request_body" in module
+
     def test_serve_fallback_preserves_env(self, tmp_path):
         import json
         from unittest.mock import MagicMock
