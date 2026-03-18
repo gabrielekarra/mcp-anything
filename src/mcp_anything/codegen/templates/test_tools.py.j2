@@ -66,7 +66,7 @@ class TestToolRegistration:
                 "{{ tool.name }}",
                 [
 {% for param in tool.parameters %}
-                    "{{ param.name }}",
+                    "{{ param.name | safe_identifier }}",
 {% endfor %}
 {% if tool.impl.strategy == "python_call" and tool.impl.python_class %}
 {% for ip in tool.impl.python_init_params %}
@@ -79,16 +79,9 @@ class TestToolRegistration:
                 [
 {% for param in tool.parameters %}
 {% if param.required %}
-                    "{{ param.name }}",
+                    "{{ param.name | safe_identifier }}",
 {% endif %}
 {% endfor %}
-{% if tool.impl.strategy == "python_call" and tool.impl.python_class %}
-{% for ip in tool.impl.python_init_params %}
-{% if ip.required and not ip.default and ip.name != "self" %}
-                    "init_{{ ip.name | safe_identifier }}",
-{% endif %}
-{% endfor %}
-{% endif %}
                 ],
             ),
 {% endfor %}
@@ -119,7 +112,7 @@ class TestOptionalParameterHandling:
         tool_input = {
 {% for param in tool.parameters %}
 {% if param.required %}
-            "{{ param.name }}": {{ sample_value(param.type, param.name) }},
+            "{{ param.name | safe_identifier }}": {{ sample_value(param.type, param.name) }},
 {% endif %}
 {% endfor %}
         }
@@ -135,7 +128,7 @@ class TestOptionalParameterHandling:
             {% set ns = namespace(has_items=false) %}{% for param in tool.parameters %}{% if param.required and tool.impl.arg_mapping.get(param.name, {}).get("style") not in ("path", "body") %}{% set ns.has_items = true %}{% endif %}{% endfor %}{% if ns.has_items %}{
 {% for param in tool.parameters %}
 {% if param.required and tool.impl.arg_mapping.get(param.name, {}).get("style") not in ("path", "body") %}
-            "{{ param.name }}": str(tool_input["{{ param.name }}"]),
+            "{{ param.name }}": str(tool_input["{{ param.name | safe_identifier }}"]),
 {% endif %}
 {% endfor %}
             }{% else %}None{% endif %}
@@ -153,7 +146,7 @@ class TestOptionalParameterHandling:
             {% set ns = namespace(has_path=false) %}{% for param in tool.parameters %}{% if param.required and tool.impl.arg_mapping.get(param.name, {}).get("style") == "path" %}{% set ns.has_path = true %}{% endif %}{% endfor %}{% if ns.has_path %}{
 {% for param in tool.parameters %}
 {% if param.required and tool.impl.arg_mapping.get(param.name, {}).get("style") == "path" %}
-            "{{ param.name }}": str(tool_input["{{ param.name }}"]),
+            "{{ param.name }}": str(tool_input["{{ param.name | safe_identifier }}"]),
 {% endif %}
 {% endfor %}
             }{% else %}None{% endif %}
@@ -200,7 +193,7 @@ class TestOptionalParameterHandling:
             "{{ tool.impl.python_function }}",
 {% for param in tool.parameters %}
 {% if param.required %}
-            {{ param.name | safe_identifier }}=tool_input["{{ param.name }}"],
+            {{ param.name | safe_identifier }}=tool_input["{{ param.name | safe_identifier }}"],
 {% endif %}
 {% endfor %}
         )
@@ -215,13 +208,14 @@ class TestOptionalParameterHandling:
             "{{ tool.name }}",
 {% for param in tool.parameters %}
 {% if param.required %}
-            {{ param.name }}=tool_input["{{ param.name }}"],
+            {{ param.name }}=tool_input["{{ param.name | safe_identifier }}"],
 {% endif %}
 {% endfor %}
         )
 {% elif tool.impl.strategy == "python_call" %}
         tool_module = importlib.import_module("{{ package_name }}.tools.{{ tool.module }}")
         monkeypatch.setattr(tool_module, "_setup_import_path", lambda *_args, **_kwargs: None)
+        tool_module._instance_cache.clear()
         captured = {}
 {% if tool.impl.python_class %}
 
@@ -233,13 +227,15 @@ class TestOptionalParameterHandling:
                 captured["args"] = kwargs
                 return "python-call-ok"
 
-        fake_module = types.SimpleNamespace({{ tool.impl.python_class }}=FakeClass)
+        fake_module = types.ModuleType("fake_{{ tool.module }}_{{ tool.name }}")
+        setattr(fake_module, "{{ tool.impl.python_class }}", FakeClass)
 {% else %}
         def fake_function(**kwargs):
             captured["args"] = kwargs
             return "python-call-ok"
 
-        fake_module = types.SimpleNamespace({{ tool.impl.python_function }}=fake_function)
+        fake_module = types.ModuleType("fake_{{ tool.module }}_{{ tool.name }}")
+        setattr(fake_module, "{{ tool.impl.python_function }}", fake_function)
 {% endif %}
         monkeypatch.setattr(tool_module, "_load_source_module", lambda *_args, **_kwargs: fake_module)
 
@@ -249,7 +245,7 @@ class TestOptionalParameterHandling:
         assert captured["args"] == {
 {% for param in tool.parameters %}
 {% if param.required %}
-            "{{ param.name }}": tool_input["{{ param.name }}"],
+            "{{ param.name }}": tool_input["{{ param.name | safe_identifier }}"],
 {% endif %}
 {% endfor %}
         }
@@ -320,7 +316,7 @@ class TestToolExecution:
     def test_{{ tool.name }}_behavior(self, server, server_module, monkeypatch):
         tool_input = {
 {% for param in tool.parameters %}
-            "{{ param.name }}": {{ sample_value(param.type, param.name) }},
+            "{{ param.name | safe_identifier }}": {{ sample_value(param.type, param.name) }},
 {% endfor %}
 {% if tool.impl.strategy == "python_call" and tool.impl.python_class %}
 {% for ip in tool.impl.python_init_params %}
@@ -343,7 +339,7 @@ class TestToolExecution:
             params={% set ns = namespace(has_items=false) %}{% for param in tool.parameters %}{% if tool.impl.arg_mapping.get(param.name, {}).get("style") not in ("path", "body") %}{% set ns.has_items = true %}{% endif %}{% endfor %}{% if ns.has_items %}{
 {% for param in tool.parameters %}
 {% if tool.impl.arg_mapping.get(param.name, {}).get("style") not in ("path", "body") %}
-                "{{ param.name }}": str(tool_input["{{ param.name }}"]),
+                "{{ param.name }}": str(tool_input["{{ param.name | safe_identifier }}"]),
 {% endif %}
 {% endfor %}
             }{% else %}None{% endif %},
@@ -357,7 +353,7 @@ class TestToolExecution:
             path_params={% set ns = namespace(has_path=false) %}{% for param in tool.parameters %}{% if tool.impl.arg_mapping.get(param.name, {}).get("style") == "path" %}{% set ns.has_path = true %}{% endif %}{% endfor %}{% if ns.has_path %}{
 {% for param in tool.parameters %}
 {% if tool.impl.arg_mapping.get(param.name, {}).get("style") == "path" %}
-                "{{ param.name }}": str(tool_input["{{ param.name }}"]),
+                "{{ param.name }}": str(tool_input["{{ param.name | safe_identifier }}"]),
 {% endif %}
 {% endfor %}
             }{% else %}None{% endif %},
@@ -401,7 +397,7 @@ class TestToolExecution:
             "{{ tool.impl.cli_entry }}",
             "{{ tool.impl.python_function }}",
 {% for param in tool.parameters %}
-            {{ param.name | safe_identifier }}=tool_input["{{ param.name }}"],
+            {{ param.name | safe_identifier }}=tool_input["{{ param.name | safe_identifier }}"],
 {% endfor %}
         )
 {% elif tool.impl.strategy == "protocol_call" %}
@@ -414,12 +410,13 @@ class TestToolExecution:
         mock_execute.assert_awaited_once_with(
             "{{ tool.name }}",
 {% for param in tool.parameters %}
-            {{ param.name }}=tool_input["{{ param.name }}"],
+            {{ param.name }}=tool_input["{{ param.name | safe_identifier }}"],
 {% endfor %}
         )
 {% elif tool.impl.strategy == "python_call" %}
         tool_module = importlib.import_module("{{ package_name }}.tools.{{ tool.module }}")
         monkeypatch.setattr(tool_module, "_setup_import_path", lambda *_args, **_kwargs: None)
+        tool_module._instance_cache.clear()
         captured = {}
 {% if tool.impl.python_class %}
 
@@ -431,13 +428,15 @@ class TestToolExecution:
                 captured["args"] = kwargs
                 return "python-call-ok"
 
-        fake_module = types.SimpleNamespace({{ tool.impl.python_class }}=FakeClass)
+        fake_module = types.ModuleType("fake_{{ tool.module }}_{{ tool.name }}")
+        setattr(fake_module, "{{ tool.impl.python_class }}", FakeClass)
 {% else %}
         def fake_function(**kwargs):
             captured["args"] = kwargs
             return "python-call-ok"
 
-        fake_module = types.SimpleNamespace({{ tool.impl.python_function }}=fake_function)
+        fake_module = types.ModuleType("fake_{{ tool.module }}_{{ tool.name }}")
+        setattr(fake_module, "{{ tool.impl.python_function }}", fake_function)
 {% endif %}
         monkeypatch.setattr(tool_module, "_load_source_module", lambda *_args, **_kwargs: fake_module)
 
@@ -446,7 +445,7 @@ class TestToolExecution:
         assert _extract_text_result(result) == "python-call-ok"
         assert captured["args"] == {
 {% for param in tool.parameters %}
-            "{{ param.name }}": tool_input["{{ param.name }}"],
+            "{{ param.name }}": tool_input["{{ param.name | safe_identifier }}"],
 {% endfor %}
         }
 {% if tool.impl.python_class %}

@@ -168,6 +168,52 @@ class TestEmitter:
         assert "mcp.json" in test_runtime
         assert "server_module.main()" in test_runtime
 
+    def test_generated_python_class_tool_tests_match_emitted_schema(self, tmp_path):
+        design = ServerDesign(
+            server_name="test-app",
+            tools=[
+                ToolSpec(
+                    name="handle_event",
+                    description="Handle an event",
+                    parameters=[
+                        ParameterSpec(name="_ctx", type="string", description="Context object"),
+                    ],
+                    module="events",
+                    impl=ToolImpl(
+                        strategy="python_call",
+                        python_module="pkg.events",
+                        python_class="EventHandler",
+                        python_function="handle_event",
+                        python_init_params=[
+                            ParameterSpec(name="client", type="string", description="Client", required=True)
+                        ],
+                    ),
+                )
+            ],
+            tool_modules={"events": ["handle_event"]},
+            backend=BackendConfig(backend_type=IPCType.PYTHON_API, codebase_path="/tmp/source"),
+        )
+
+        emitter = Emitter(design, tmp_path)
+        emitter.emit_all()
+        emitter.emit_tests()
+
+        test_tools = (tmp_path / "tests" / "test_tools.py").read_text()
+        assert '''(
+                "handle_event",
+                [
+                    "ctx",
+                    "init_client",
+                ],
+                [
+                    "ctx",
+                ],
+            ),''' in test_tools
+        assert 'tool_module._instance_cache.clear()' in test_tools
+        assert 'types.ModuleType("fake_events_handle_event")' in test_tools
+        assert 'tool_input["ctx"]' in test_tools
+        assert '"_ctx": tool_input["ctx"]' in test_tools
+
     def test_emit_packaging(self, sample_design, tmp_path):
         emitter = Emitter(sample_design, tmp_path)
         files = emitter.emit_packaging()
