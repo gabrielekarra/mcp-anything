@@ -582,7 +582,7 @@ class TestWebSocketProtocol:
 # ---------------------------------------------------------------------------
 
 class TestHTTPTransport:
-    """Integration test: --transport http generates Dockerfile and SSE config."""
+    """Integration test: --transport http generates Dockerfile and Streamable HTTP config."""
 
     @pytest.mark.asyncio
     async def test_http_transport(self, fake_flask_app, tmp_output):
@@ -605,7 +605,7 @@ class TestHTTPTransport:
         assert "url" in server_cfg, (
             f"HTTP transport should use 'url' in mcp.json, got: {server_cfg}"
         )
-        assert "sse" in server_cfg["url"]
+        assert server_cfg["url"].endswith("/mcp")
 
 
 class TestStdioTransport:

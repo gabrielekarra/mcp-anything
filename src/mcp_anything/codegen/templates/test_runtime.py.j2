@@ -28,7 +28,7 @@ class TestPackageRuntime:
         config = json.loads((root / "mcp.json").read_text())
         server_entry = config["mcpServers"]["{{ design.server_name | replace('_', '-') }}"]
 {% if design.transport == "http" %}
-        assert server_entry["url"] == "http://localhost:{{ design.http_port }}/sse"
+        assert server_entry["url"] == "http://localhost:{{ design.http_port }}/mcp"
 {% else %}
         assert server_entry["command"] == "mcp-{{ design.server_name | replace('_', '-') }}"
         assert server_entry["args"] == []
@@ -44,11 +44,9 @@ class TestPackageRuntime:
         server_module.main()
 
 {% if design.transport == "http" %}
-        mock_run.assert_called_once_with(
-            transport="sse",
-            host="{{ design.http_host }}",
-            port={{ design.http_port }},
-        )
+        assert server_module.server.settings.host == "{{ design.http_host }}"
+        assert server_module.server.settings.port == {{ design.http_port }}
+        mock_run.assert_called_once_with(transport="streamable-http")
 {% else %}
         mock_run.assert_called_once_with(transport="stdio")
 {% endif %}
@@ -71,11 +69,9 @@ class TestPackageRuntime:
 
         server_module.main()
 
-        mock_run.assert_called_once_with(
-            transport="sse",
-            host="127.0.0.1",
-            port=9100,
-        )
+        assert server_module.server.settings.host == "127.0.0.1"
+        assert server_module.server.settings.port == 9100
+        mock_run.assert_called_once_with(transport="streamable-http")
 {% endif %}
 
 {% if design.backend %}

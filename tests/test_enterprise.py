@@ -127,7 +127,7 @@ class TestServerTemplate:
         server_py = (tmp_path / "src/mcp_testapp/server.py").read_text()
         ast.parse(server_py)
         assert 'os.environ.get("MCP_TRANSPORT", "http")' in server_py
-        assert 'server.run(transport="sse"' in server_py
+        assert 'server.run(transport="streamable-http")' in server_py
 
     def test_http_server_includes_telemetry(self, tmp_path):
         design = _make_design("http")
@@ -229,7 +229,8 @@ class TestAgentsMd:
         emitter = Emitter(design, tmp_path)
         emitter.emit_docs()
         content = (tmp_path / "AGENTS.md").read_text()
-        assert "/sse" in content
+        assert "remote MCP clients" in content
+        assert "mcp-use" in content
 
     def test_agents_md_disabled(self, tmp_path):
         design = _make_design()
@@ -275,12 +276,12 @@ class TestMcpConfigTransport:
         config = {
             "mcpServers": {
                 "testapp": {
-                    "url": f"http://localhost:{design.http_port}/sse",
+                    "url": f"http://localhost:{design.http_port}/mcp",
                 }
             }
         }
         assert "url" in config["mcpServers"]["testapp"]
-        assert "/sse" in config["mcpServers"]["testapp"]["url"]
+        assert "/mcp" in config["mcpServers"]["testapp"]["url"]
 
 
 class TestServeCommand:

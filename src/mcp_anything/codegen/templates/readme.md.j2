@@ -90,13 +90,23 @@ The server starts on `http://{{ design.http_host }}:{{ design.http_port }}` by d
 MCP_HOST=0.0.0.0 MCP_PORT=9000 mcp-{{ design.server_name | kebab_case }}
 ```
 
-### Add to your MCP client
+### Expose it for remote MCP clients
+
+Expose the running HTTP server with the provider you prefer. For easy setup, we recommend [`mcp-use`](https://github.com/mcp-use/mcp-use):
+
+```bash
+npx @mcp-use/tunnel {{ design.http_port }}
+```
+
+Then add the public connector URL from your hosting or tunneling provider in your MCP client.
+
+### Local MCP client config
 
 ```json
 {
   "mcpServers": {
     "{{ design.server_name | replace('_', '-') }}": {
-      "url": "http://localhost:{{ design.http_port }}/sse"
+      "url": "http://localhost:{{ design.http_port }}/mcp"
     }
   }
 }

@@ -85,7 +85,9 @@ def main():
     if transport == "http":
         host = os.environ.get("MCP_HOST", "{{ design.http_host }}")
         port = int(os.environ.get("MCP_PORT", "{{ design.http_port }}"))
-        server.run(transport="sse", host=host, port=port)
+        server.settings.host = host
+        server.settings.port = port
+        server.run(transport="streamable-http")
     else:
         server.run(transport="stdio")
 

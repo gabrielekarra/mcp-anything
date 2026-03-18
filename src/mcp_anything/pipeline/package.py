@@ -147,7 +147,7 @@ class PackagePhase(Phase):
         config_path.write_text(json.dumps(mcp_config, indent=2) + "\n")
 
     def _emit_mcp_config(self, ctx: PipelineContext, output_dir: Path) -> None:
-        """Print MCP config snippet for Claude Code integration (file already written by emitter)."""
+        """Print MCP config guidance for local clients and remote connector setups."""
         design = ctx.manifest.design
         assert design is not None
 
@@ -165,6 +165,22 @@ class PackagePhase(Phase):
                 "    [yellow]Users enter this token in the browser login form when connecting via Claude.[/yellow]"
             )
         ctx.console.print()
-        ctx.console.print("    [bold]Add to your Claude Code config (.mcp.json):[/bold]")
+        if design.transport == "http":
+            ctx.console.print("    [bold]Use with remote MCP clients:[/bold]")
+            ctx.console.print(
+                "    Start the server, then expose it with the provider you prefer."
+            )
+            ctx.console.print(
+                "    We recommend [cyan]mcp-use[/cyan] for easy setup, but it is optional:"
+            )
+            ctx.console.print("    [cyan]https://github.com/mcp-use/mcp-use[/cyan]")
+            ctx.console.print(
+                "    Add the public connector URL from your hosting or tunneling provider in your MCP client."
+            )
+            ctx.console.print(f"    Example: [cyan]npx @mcp-use/tunnel {design.http_port}[/cyan]")
+            ctx.console.print()
+            ctx.console.print("    [bold]Local MCP client config:[/bold]")
+        else:
+            ctx.console.print("    [bold]Add to your Claude Code config (.mcp.json):[/bold]")
         snippet = json.dumps(mcp_config["mcpServers"], indent=6)
         ctx.console.print(f"    {snippet}")

@@ -178,7 +178,7 @@ class Emitter:
         import json as _json
         server_slug = self.design.server_name.replace("_", "-")
         if self.design.transport == "http":
-            server_entry: dict = {"url": f"http://localhost:{self.design.http_port}/sse"}
+            server_entry: dict = {"url": f"http://localhost:{self.design.http_port}/mcp"}
         else:
             env: dict[str, str] = {}
             env_prefix = self.design.server_name.upper().replace("-", "_")

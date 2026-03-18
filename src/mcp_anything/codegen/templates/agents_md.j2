@@ -57,13 +57,13 @@ Manual steps:
 ## Usage
 
 {% if design.transport == "http" %}
-This server runs over HTTP (streamable). Connect to it at the configured endpoint.
+This server runs over Streamable HTTP. For remote MCP clients, expose it with the provider you prefer. We recommend [`mcp-use`](https://github.com/mcp-use/mcp-use) for easy setup, then add the public connector URL in your client.
 
 ```json
 {
   "mcpServers": {
     "{{ design.server_name }}": {
-      "url": "http://localhost:{{ design.http_port }}/sse"
+      "url": "http://localhost:{{ design.http_port }}/mcp"
     }
   }
 }
