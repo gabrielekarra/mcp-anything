@@ -51,6 +51,39 @@ For remote deployments, also set `MCP_SERVER_URL=https://your-server.example.com
 }
 ```
 
+## Scoping: control what gets exposed
+
+Large codebases can have hundreds or thousands of endpoints. You don't want all of them as MCP tools. Three mechanisms let you control scope:
+
+**Quick filter with `--include` / `--exclude`:**
+```bash
+# Only expose /api/v2 endpoints
+mcp-anything generate ./my-app --include "/api/v2/*"
+
+# Exclude internal and debug routes
+mcp-anything generate ./my-app --exclude "/internal/*" --exclude "debug_*"
+```
+
+**Review mode — curate before generating:**
+```bash
+# Step 1: analyze and pause
+mcp-anything generate ./my-app --review
+
+# Step 2: edit the generated scope.yaml (enable/disable per capability)
+vim mcp-my-app-server/scope.yaml
+
+# Step 3: resume generation with your curated scope
+mcp-anything generate ./my-app --resume
+```
+
+**Reusable scope file:**
+```bash
+# Use a pre-built scope file (check it into your repo)
+mcp-anything generate ./my-app --scope-file ./mcp-scope.yaml
+```
+
+Patterns match against capability names, source file paths, and descriptions using glob syntax. In the scope file, you can also set `enabled: false` on individual capabilities for precise control.
+
 ## Output
 
 ```
@@ -112,6 +145,53 @@ The generated server covers **every** GitHub REST API endpoint — repos, issues
 The official server is **curated**: 80 tools chosen for what LLMs actually need, with custom logic and GraphQL integration. The auto-generated server is **comprehensive**: 1,093 tools covering the entire API surface. It's the difference between a bespoke suit and an instant wardrobe — one fits perfectly, the other covers everything immediately.
 
 See [`examples/github-server/`](examples/github-server/) for the full generated code.
+
+### Scoping down to match the official server
+
+But what if you only want the same ~80 tools the official server exposes? Use `--scope-file`:
+
+```bash
+mcp-anything generate \
+  https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json \
+  --name github-scoped --no-llm \
+  --scope-file examples/github-server-scoped/scope.yaml \
+  -o examples/github-server-scoped
+```
+
+|  | Official (hand-built) | Full auto-generated | **Scoped auto-generated** |
+|--|----------------------|---------------------|--------------------------|
+| **Tools** | ~80 (curated) | 1,093 (every endpoint) | **67 (matching official)** |
+| **Build time** | Months | ~6 seconds | ~6 seconds |
+| **Coverage** | Curated subset + GraphQL | Entire REST API | Same REST endpoints as official |
+| **Scope control** | Hardcoded in Go | None needed | `scope.yaml` (69 lines) |
+
+The scope file ([`examples/github-server-scoped/scope.yaml`](examples/github-server-scoped/scope.yaml)) uses `exclude_patterns: ["*"]` to exclude everything by default, then `enabled: true` on the 67 specific tools that map to official endpoints. 11 official tools use GraphQL or Copilot-specific APIs and have no REST equivalent — these are documented in the scope file.
+
+**Reproduce it yourself:**
+
+```bash
+# 1. Generate the full server (1,093 tools)
+mcp-anything generate \
+  https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json \
+  --name github --no-llm
+
+# 2. Generate the scoped server (67 tools, matching official)
+mcp-anything generate \
+  https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json \
+  --name github-scoped --no-llm \
+  --scope-file examples/github-server-scoped/scope.yaml
+
+# 3. Or use review mode to curate interactively
+mcp-anything generate \
+  https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json \
+  --name github-custom --no-llm --review
+# Edit mcp-github-custom-server/scope.yaml, then:
+mcp-anything generate \
+  https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json \
+  --name github-custom --resume
+```
+
+See [`examples/github-server-scoped/`](examples/github-server-scoped/) for the scoped output.
 
 ## Roadmap
 

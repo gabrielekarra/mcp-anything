@@ -21,6 +21,10 @@ class CLIOptions(BaseModel):
     transport: str = "stdio"  # "stdio" or "http"
     server_auth: bool = False  # protect HTTP transport with bearer token
     source_url: Optional[str] = None  # URL if fetched from remote
+    include: Optional[list[str]] = None  # glob patterns to include capabilities
+    exclude: Optional[list[str]] = None  # glob patterns to exclude capabilities
+    scope_file: Optional[Path] = None  # path to scope.yaml for capability curation
+    review: bool = False  # pause after ANALYZE to write scope.yaml for editing
 
     def resolved_name(self) -> str:
         """Server name derived from codebase directory or override."""

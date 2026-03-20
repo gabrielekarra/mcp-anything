@@ -8,6 +8,7 @@ from mcp_anything.config import CLIOptions
 from mcp_anything.models.manifest import GenerationManifest
 from mcp_anything.pipeline.context import PipelineContext
 from mcp_anything.pipeline.phase import Phase
+from mcp_anything.pipeline.scope import apply_scope, write_scope_file
 
 
 ALL_PHASES = ["analyze", "design", "implement", "test", "document", "package"]
@@ -65,6 +66,39 @@ class PipelineEngine:
             server_name=self.options.resolved_name(),
         )
 
+    def _apply_scope_filtering(
+        self, manifest: GenerationManifest, ctx: PipelineContext
+    ) -> None:
+        """Apply scope filtering to analysis capabilities."""
+        scope_path = Path(manifest.output_dir) / "scope.yaml"
+        has_scope = (
+            self.options.include
+            or self.options.exclude
+            or self.options.scope_file
+            or scope_path.exists()
+        )
+        if not has_scope or not manifest.analysis:
+            return
+
+        effective_scope_file = self.options.scope_file
+        if not effective_scope_file and scope_path.exists():
+            effective_scope_file = scope_path
+
+        before = len(manifest.analysis.capabilities)
+        manifest.analysis = apply_scope(
+            manifest.analysis,
+            include_patterns=self.options.include,
+            exclude_patterns=self.options.exclude,
+            scope_file=effective_scope_file,
+        )
+        after = len(manifest.analysis.capabilities)
+        if before != after:
+            self.console.print(
+                f"  [yellow]Scope:[/yellow] {before} capabilities → {after} "
+                f"({before - after} excluded)"
+            )
+        ctx.save_manifest()
+
     async def run(self) -> None:
         manifest = self._init_manifest()
         ctx = PipelineContext(self.options, manifest, self.console)
@@ -78,6 +112,10 @@ class PipelineEngine:
         )
         self.console.print(f"Phases: {', '.join(phase_names)}")
         self.console.print()
+
+        # On resume: apply scope filtering before running remaining phases
+        if self.options.resume and manifest.phase_completed("analyze") and manifest.analysis:
+            self._apply_scope_filtering(manifest, ctx)
 
         for phase in phases:
             if self.options.resume and manifest.phase_completed(phase.name):
@@ -102,6 +140,29 @@ class PipelineEngine:
             manifest.mark_phase_completed(phase.name)
             ctx.save_manifest()
             self.console.print(f"  [green]✓[/green] {phase.name} complete")
+
+            # Scope filtering: after ANALYZE, before DESIGN
+            if phase.name == "analyze":
+                scope_path = Path(manifest.output_dir) / "scope.yaml"
+
+                # --review mode: write scope.yaml and stop for user editing
+                if self.options.review:
+                    write_scope_file(manifest.analysis, scope_path)
+                    self.console.print()
+                    self.console.print(
+                        f"[bold yellow]Review mode:[/bold yellow] scope file written to "
+                        f"[cyan]{scope_path}[/cyan]"
+                    )
+                    self.console.print(
+                        "  Edit the file to enable/disable capabilities, then run:"
+                    )
+                    self.console.print(
+                        f"  [bold]mcp-anything generate {manifest.codebase_path} --resume[/bold]"
+                    )
+                    return
+
+                # Apply scope filtering if any scope options are set
+                self._apply_scope_filtering(manifest, ctx)
 
         self.console.print()
         self.console.print(f"[bold green]Done![/bold green] Output: {ctx.output_dir}")

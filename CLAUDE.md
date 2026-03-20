@@ -20,6 +20,7 @@ One command: `mcp-anything generate <path>` → pip-installable MCP server packa
 ## Key Files
 - `src/mcp_anything/cli.py` — CLI entry point
 - `src/mcp_anything/pipeline/engine.py` — phase orchestration
+- `src/mcp_anything/pipeline/scope.py` — scope filtering (--include/--exclude/--review/--scope-file)
 - `src/mcp_anything/pipeline/analyze.py` — phase 1: detection + AST analysis
 - `src/mcp_anything/pipeline/design.py` — phase 2: capability → tool mapping
 - `src/mcp_anything/pipeline/implement.py` — phase 3: code generation
@@ -78,6 +79,7 @@ Working features:
 - LLM-enhanced analysis (optional, via Claude API)
 - Auth support on backend calls (API key, Bearer, Basic, OAuth2)
 - URL-based generation (`mcp-anything generate https://api.example.com/openapi.json`)
+- Scope filtering: `--include`/`--exclude` patterns, `--review` mode, `--scope-file`
 
 ### What's BROKEN (bugs to fix)
 
@@ -148,9 +150,23 @@ Working features:
 - **Live tested**: WebSocket JSON-RPC server → 5 calls all returned correct results.
 - **Real-world tested**: Podnet/json-rpc-websocket-server → 13 tools, 15 tests pass.
 
-### Integration Test Coverage (updated 2026-03-17)
+### Scope filtering — IMPLEMENTED 2026-03-20
+- **Problem**: Large codebases (e.g. 1500-route monoliths) expose everything as MCP tools.
+  Users need to curate which capabilities are exposed incrementally.
+- **Three mechanisms**:
+  1. `--include`/`--exclude` CLI flags: glob patterns on capability name, source path, description
+  2. `--review` mode: pause after ANALYZE, write `scope.yaml`, user edits, then `--resume`
+  3. `--scope-file`: point to a pre-existing scope YAML for repeatable builds
+- **Scope file semantics**: per-capability `enabled: false` = always excluded,
+  `enabled: true` = always included (overrides patterns), omitted = patterns decide
+- **Implementation**: `src/mcp_anything/pipeline/scope.py` + wired into engine.py
+  between ANALYZE and DESIGN phases. On `--resume`, auto-loads `scope.yaml` if present.
+- **28 tests** in `tests/test_scope.py` covering: file I/O, include/exclude patterns,
+  scope file overrides, combined CLI+file patterns, edge cases, review/resume workflow.
 
-359 total tests. `tests/test_integration.py` covers:
+### Integration Test Coverage (updated 2026-03-20)
+
+434 total tests. `tests/test_integration.py` covers:
 - Python CLI (argparse), Flask, FastAPI, Django DRF
 - Express.js (including cross-file router mount prefix regression test)
 - Spring Boot, JAX-RS, Micronaut
@@ -162,6 +178,7 @@ Working features:
 - Pipeline resume (partial run → resume completes remaining phases)
 - Manifest integrity (analysis + design populated, files tracked)
 - AGENTS.md content (tool names documented)
+- **Scope filtering** (include/exclude patterns, scope file, review/resume workflow)
 
 ---
 
@@ -200,7 +217,12 @@ protocol stub with a real WebSocket backend using `websockets` library. Socket
 backend upgraded with BackendError, retry logic, JSON-RPC parsing. Added
 integration test for WebSocket protocol. 359 total tests pass.
 
-### Phase 6: Future Features (from ROADMAP v0.6.0+)
+### Phase 6: Scope Filtering — DONE (2026-03-20)
+
+`--include`, `--exclude`, `--review`, `--scope-file` CLI flags. Scope YAML file
+for per-capability curation. 28 tests in `tests/test_scope.py`. See scope.py docs.
+
+### Phase 7: Future Features (from ROADMAP v0.6.0+)
 
 In priority order:
 1. **CLI UX** — validate `--phases` input, better error messages

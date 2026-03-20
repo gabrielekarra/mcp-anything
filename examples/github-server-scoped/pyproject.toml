@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcp-github-scoped-server"
+version = "0.1.0"
+description = "MCP server for github-scoped (with 1099 capabilities)"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+mcp-github-scoped = "mcp_github_scoped.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_github_scoped"]
+

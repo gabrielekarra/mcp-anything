@@ -721,3 +721,178 @@ class TestAGENTSmd:
         tool_names = _get_tool_names(manifest)
         for name in list(tool_names)[:3]:  # Check at least a few
             assert name in content, f"Tool '{name}' not documented in AGENTS.md"
+
+
+# ---------------------------------------------------------------------------
+# Tests — Scope filtering
+# ---------------------------------------------------------------------------
+
+class TestScopeFiltering:
+    """Integration tests for --include/--exclude/--scope-file/--review."""
+
+    @pytest.fixture
+    def openapi_dir(self, fixtures_dir, tmp_path):
+        """Petstore OpenAPI spec in a temp dir."""
+        spec_dir = tmp_path / "petstore"
+        spec_dir.mkdir()
+        import shutil
+        shutil.copy(fixtures_dir / "petstore_openapi.json", spec_dir / "openapi.json")
+        return spec_dir
+
+    @pytest.mark.asyncio
+    async def test_include_filters_tools(self, openapi_dir, tmp_output):
+        """--include restricts which capabilities become tools."""
+        options = CLIOptions(
+            codebase_path=openapi_dir,
+            output_dir=tmp_output,
+            name="petstore",
+            no_llm=True,
+            no_install=True,
+            include=["list_*", "get_*"],
+        )
+        console = Console(quiet=True)
+        engine = PipelineEngine(options, console)
+        await engine.run()
+
+        manifest = GenerationManifest.load(tmp_output / "mcp-anything-manifest.json")
+        tool_names = _get_tool_names(manifest)
+
+        # Only list_* and get_* should survive
+        assert "list_pets" in tool_names
+        assert "get_pet" in tool_names
+        # create_pet, delete_pet should be excluded
+        assert "create_pet" not in tool_names
+        assert "delete_pet" not in tool_names
+
+        # Still produces valid output
+        syntax_errors = _validate_python_syntax(tmp_output)
+        assert syntax_errors == [], f"Syntax errors: {syntax_errors}"
+
+    @pytest.mark.asyncio
+    async def test_exclude_filters_tools(self, openapi_dir, tmp_output):
+        """--exclude removes matching capabilities."""
+        options = CLIOptions(
+            codebase_path=openapi_dir,
+            output_dir=tmp_output,
+            name="petstore",
+            no_llm=True,
+            no_install=True,
+            exclude=["delete_*"],
+        )
+        console = Console(quiet=True)
+        engine = PipelineEngine(options, console)
+        await engine.run()
+
+        manifest = GenerationManifest.load(tmp_output / "mcp-anything-manifest.json")
+        tool_names = _get_tool_names(manifest)
+
+        assert "list_pets" in tool_names
+        assert "create_pet" in tool_names
+        assert "delete_pet" not in tool_names
+
+    @pytest.mark.asyncio
+    async def test_scope_file_filters_tools(self, openapi_dir, tmp_output, tmp_path):
+        """--scope-file with per-capability enabled/disabled."""
+        import yaml
+
+        scope_path = tmp_path / "scope.yaml"
+        scope_doc = {
+            "include_patterns": [],
+            "exclude_patterns": [],
+            "capabilities": [
+                {"name": "list_pets", "enabled": True},
+                {"name": "get_pet", "enabled": True},
+                {"name": "create_pet", "enabled": False},
+                {"name": "delete_pet", "enabled": False},
+            ],
+        }
+        with open(scope_path, "w") as f:
+            yaml.dump(scope_doc, f)
+
+        options = CLIOptions(
+            codebase_path=openapi_dir,
+            output_dir=tmp_output,
+            name="petstore",
+            no_llm=True,
+            no_install=True,
+            scope_file=scope_path,
+        )
+        console = Console(quiet=True)
+        engine = PipelineEngine(options, console)
+        await engine.run()
+
+        manifest = GenerationManifest.load(tmp_output / "mcp-anything-manifest.json")
+        tool_names = _get_tool_names(manifest)
+
+        assert "list_pets" in tool_names
+        assert "get_pet" in tool_names
+        assert "create_pet" not in tool_names
+        assert "delete_pet" not in tool_names
+
+        # Valid output with correct tool count
+        syntax_errors = _validate_python_syntax(tmp_output)
+        assert syntax_errors == [], f"Syntax errors: {syntax_errors}"
+
+    @pytest.mark.asyncio
+    async def test_review_then_resume(self, openapi_dir, tmp_output):
+        """--review pauses after analyze; --resume loads scope.yaml."""
+        import yaml
+
+        # Step 1: Run with --review — should stop after analyze
+        review_options = CLIOptions(
+            codebase_path=openapi_dir,
+            output_dir=tmp_output,
+            name="petstore",
+            no_llm=True,
+            no_install=True,
+            review=True,
+        )
+        console = Console(quiet=True)
+        engine = PipelineEngine(review_options, console)
+        await engine.run()
+
+        # Should have created scope.yaml and stopped after analyze
+        manifest = GenerationManifest.load(tmp_output / "mcp-anything-manifest.json")
+        assert manifest.completed_phases == ["analyze"]
+
+        scope_path = tmp_output / "scope.yaml"
+        assert scope_path.exists(), "scope.yaml not created by --review"
+
+        # Step 2: User edits scope — disable some capabilities
+        doc = yaml.safe_load(scope_path.read_text())
+        for entry in doc["capabilities"]:
+            if entry["name"] in ("create_pet", "delete_pet"):
+                entry["enabled"] = False
+        with open(scope_path, "w") as f:
+            yaml.dump(doc, f)
+
+        # Step 3: Resume — should apply scope and complete
+        resume_options = CLIOptions(
+            codebase_path=openapi_dir,
+            output_dir=tmp_output,
+            name="petstore",
+            no_llm=True,
+            no_install=True,
+            resume=True,
+        )
+        engine2 = PipelineEngine(resume_options, console)
+        await engine2.run()
+
+        manifest2 = GenerationManifest.load(tmp_output / "mcp-anything-manifest.json")
+        assert manifest2.completed_phases == [
+            "analyze", "design", "implement", "test", "document", "package"
+        ]
+
+        tool_names = _get_tool_names(manifest2)
+        assert "list_pets" in tool_names
+        assert "get_pet" in tool_names
+        assert "create_pet" not in tool_names
+        assert "delete_pet" not in tool_names
+
+        # Generated code is valid and tests pass
+        syntax_errors = _validate_python_syntax(tmp_output)
+        assert syntax_errors == [], f"Syntax errors: {syntax_errors}"
+        result = _run_generated_tests(tmp_output)
+        assert result.returncode == 0, (
+            f"Generated tests failed:\n{result.stdout[-2000:]}\n{result.stderr[-1000:]}"
+        )

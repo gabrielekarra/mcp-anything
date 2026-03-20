@@ -1,0 +1,195 @@
+# Scope file: match the official github/github-mcp-server's ~80 curated tools
+#
+# The official server hand-picks ~80 tools from GitHub's entire API surface.
+# This scope file narrows our auto-generated 1,093 tools to match the same set.
+#
+# 11 official tools use GraphQL or Copilot-specific APIs (marked as not available below).
+# The remaining 69 map to REST API endpoints we auto-detect from the OpenAPI spec.
+#
+# Usage:
+#   mcp-anything generate https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json \
+#     --name github --no-llm --scope-file examples/github-server-scoped/scope.yaml \
+#     -o examples/github-server-scoped
+
+include_patterns: []
+exclude_patterns: ["*"]  # Exclude everything by default; enabled: true overrides per-tool
+
+capabilities:
+  # --- Context tools ---
+  - name: users_get_authenticated       # official: get_me
+    enabled: true
+  - name: teams_list                    # official: get_teams
+    enabled: true
+  - name: teams_list_members_in_org     # official: get_team_members
+    enabled: true
+
+  # --- Repository tools ---
+  - name: search_repos                  # official: search_repositories
+    enabled: true
+  - name: repos_get_content             # official: get_file_contents
+    enabled: true
+  - name: repos_list_commits            # official: list_commits
+    enabled: true
+  - name: search_code                   # official: search_code
+    enabled: true
+  - name: repos_get_commit              # official: get_commit
+    enabled: true
+  - name: repos_list_branches           # official: list_branches
+    enabled: true
+  - name: repos_list_tags               # official: list_tags
+    enabled: true
+  - name: git_get_tag                   # official: get_tag
+    enabled: true
+  - name: repos_list_releases           # official: list_releases
+    enabled: true
+  - name: repos_get_latest_release      # official: get_latest_release
+    enabled: true
+  - name: repos_get_release_by_tag      # official: get_release_by_tag
+    enabled: true
+  - name: repos_create_or_update_file_contents  # official: create_or_update_file + push_files
+    enabled: true
+  - name: repos_create_for_authenticated_user   # official: create_repository
+    enabled: true
+  - name: repos_create_fork             # official: fork_repository
+    enabled: true
+  - name: git_create_ref                # official: create_branch
+    enabled: true
+  - name: repos_delete_file             # official: delete_file
+    enabled: true
+  - name: activity_list_repos_starred_by_authenticated_user  # official: list_starred_repositories
+    enabled: true
+  - name: activity_star_repo_for_authenticated_user          # official: star_repository
+    enabled: true
+  - name: activity_unstar_repo_for_authenticated_user        # official: unstar_repository
+    enabled: true
+
+  # --- Git tools ---
+  - name: git_get_tree                  # official: get_repository_tree
+    enabled: true
+
+  # --- Issue tools ---
+  - name: issues_create                 # official: create_issue
+    enabled: true
+  - name: issues_get                    # official: issue_read
+    enabled: true
+  - name: search_issues_and_pull_requests  # official: search_issues + search_pull_requests
+    enabled: true
+  - name: issues_list_for_repo          # official: list_issues
+    enabled: true
+  - name: orgs_list_issue_types         # official: list_issue_types
+    enabled: true
+  - name: issues_update                 # official: issue_write
+    enabled: true
+  - name: issues_create_comment         # official: add_issue_comment
+    enabled: true
+  - name: issues_add_sub_issue          # official: sub_issue_write
+    enabled: true
+
+  # --- User tools ---
+  - name: search_users                  # official: search_users
+    enabled: true
+
+  # --- Pull request tools ---
+  - name: pulls_get                     # official: pull_request_read
+    enabled: true
+  - name: pulls_list                    # official: list_pull_requests
+    enabled: true
+  - name: pulls_merge                   # official: merge_pull_request
+    enabled: true
+  - name: pulls_update_branch           # official: update_pull_request_branch
+    enabled: true
+  - name: pulls_create                  # official: create_pull_request
+    enabled: true
+  - name: pulls_update                  # official: update_pull_request
+    enabled: true
+  - name: pulls_submit_review           # official: pull_request_review_write
+    enabled: true
+  - name: pulls_create_review_comment   # official: add_comment_to_pending_review
+    enabled: true
+  - name: pulls_create_reply_for_review_comment  # official: add_reply_to_pull_request_comment
+    enabled: true
+
+  # --- Code security tools ---
+  - name: code_scanning_get_alert       # official: get_code_scanning_alert
+    enabled: true
+  - name: code_scanning_list_alerts_for_repo  # official: list_code_scanning_alerts
+    enabled: true
+
+  # --- Secret protection tools ---
+  - name: secret_scanning_get_alert     # official: get_secret_scanning_alert
+    enabled: true
+  - name: secret_scanning_list_alerts_for_repo  # official: list_secret_scanning_alerts
+    enabled: true
+
+  # --- Dependabot tools ---
+  - name: dependabot_get_alert          # official: get_dependabot_alert
+    enabled: true
+  - name: dependabot_list_alerts_for_repo  # official: list_dependabot_alerts
+    enabled: true
+
+  # --- Notification tools ---
+  - name: get_notifications             # official: list_notifications
+    enabled: true
+  - name: activity_get_thread           # official: get_notification_details
+    enabled: true
+  - name: activity_mark_thread_as_done  # official: dismiss_notification
+    enabled: true
+  - name: activity_mark_notifications_as_read  # official: mark_all_notifications_read
+    enabled: true
+  - name: activity_set_thread_subscription     # official: manage_notification_subscription
+    enabled: true
+  - name: activity_set_repo_subscription       # official: manage_repository_notification_subscription
+    enabled: true
+
+  # --- Actions tools ---
+  - name: actions_list_repo_workflows   # official: actions_list
+    enabled: true
+  - name: actions_get_workflow          # official: actions_get
+    enabled: true
+  - name: actions_create_workflow_dispatch  # official: actions_run_trigger
+    enabled: true
+  - name: actions_download_job_logs_for_workflow_run  # official: get_job_logs
+    enabled: true
+
+  # --- Security advisories tools ---
+  - name: security_advisories_list_global_advisories   # official: list_global_security_advisories
+    enabled: true
+  - name: security_advisories_get_global_advisory      # official: get_global_security_advisory
+    enabled: true
+  - name: security_advisories_list_repository_advisories  # official: list_repository_security_advisories
+    enabled: true
+
+  # --- Gist tools ---
+  - name: gists_list                    # official: list_gists
+    enabled: true
+  - name: gists_get                     # official: get_gist
+    enabled: true
+  - name: gists_create                  # official: create_gist
+    enabled: true
+  - name: gists_update                  # official: update_gist
+    enabled: true
+
+  # --- Label tools ---
+  - name: issues_get_label              # official: get_label
+    enabled: true
+  - name: issues_list_labels_for_repo   # official: list_label
+    enabled: true
+  - name: issues_create_label           # official: label_write
+    enabled: true
+
+  # -----------------------------------------------------------------------
+  # NOT AVAILABLE via REST API (GraphQL-only or Copilot-specific)
+  # These 11 official tools have no equivalent in the OpenAPI spec:
+  #
+  #   - assign_copilot_to_issue       (Copilot-specific API)
+  #   - request_copilot_review        (Copilot-specific API)
+  #   - search_orgs                   (no direct REST endpoint)
+  #   - list_discussions              (GraphQL only)
+  #   - get_discussion                (GraphQL only)
+  #   - get_discussion_comments       (GraphQL only)
+  #   - list_discussion_categories    (GraphQL only)
+  #   - projects_list                 (GraphQL only)
+  #   - projects_get                  (GraphQL only)
+  #   - projects_write                (GraphQL only)
+  #   - list_org_repository_security_advisories  (org-level, different endpoint)
+  # -----------------------------------------------------------------------

@@ -49,6 +49,30 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Protect the HTTP server with bearer token auth (reads MCP_SERVER_TOKEN env var)",
     )
+    gen.add_argument(
+        "--include",
+        action="append",
+        default=None,
+        help="Glob pattern to include capabilities (repeatable, e.g. --include '/api/v2/*')",
+    )
+    gen.add_argument(
+        "--exclude",
+        action="append",
+        default=None,
+        help="Glob pattern to exclude capabilities (repeatable, e.g. --exclude '/internal/*')",
+    )
+    gen.add_argument(
+        "--scope-file",
+        type=Path,
+        default=None,
+        help="Path to a scope.yaml file for capability curation",
+    )
+    gen.add_argument(
+        "--review",
+        action="store_true",
+        default=False,
+        help="Pause after analysis to write scope.yaml for manual editing, then --resume to continue",
+    )
     gen.add_argument("-v", "--verbose", action="store_true")
 
     # analyze
@@ -94,6 +118,10 @@ def parse_options(args: argparse.Namespace) -> CLIOptions:
         verbose=getattr(args, "verbose", False),
         transport=getattr(args, "transport", "stdio") or "stdio",
         server_auth=getattr(args, "server_auth", False),
+        include=getattr(args, "include", None),
+        exclude=getattr(args, "exclude", None),
+        scope_file=getattr(args, "scope_file", None),
+        review=getattr(args, "review", False),
     )
 
 

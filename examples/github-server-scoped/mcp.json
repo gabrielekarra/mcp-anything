@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "github-scoped": {
+      "command": "mcp-github-scoped",
+      "args": [],
+      "env": {
+        "GITHUB_SCOPED_BASE_URL": "http://localhost:0"
+      }
+    }
+  }
+}

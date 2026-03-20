@@ -95,6 +95,133 @@ For most use cases, the auto-generated server is a working starting point that w
 
 ---
 
+## GitHub API → Scoped MCP Server (matching official tools)
+
+**Source:** Same [GitHub REST API OpenAPI spec](https://github.com/github/rest-api-description) as above, but scoped with a `scope.yaml` file to match only the tools the [official GitHub MCP server](https://github.com/github/github-mcp-server) exposes.
+
+**Command:**
+```bash
+mcp-anything generate \
+  https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json \
+  --name github-scoped --no-llm \
+  --scope-file examples/github-server-scoped/scope.yaml \
+  -o examples/github-server-scoped
+```
+
+**Result:** 1,093 auto-detected capabilities → **67 tools** after scope filtering (1,032 excluded).
+
+### Why 67 and not 80?
+
+The official server has **80 tools**, but:
+- **11 use GraphQL or Copilot-specific APIs** that don't appear in the REST OpenAPI spec (discussions, projects, Copilot assignment)
+- **2 official tools map to the same REST endpoint** (`push_files` and `create_or_update_file` both use `PUT /repos/{owner}/{repo}/contents/{path}`; `search_issues` and `search_pull_requests` share the same search endpoint)
+
+That leaves **67 unique REST tools** — exactly what we generate.
+
+### How it compares
+
+|  | Official (hand-built) | Full auto-generated | **Scoped auto-generated** |
+|--|----------------------|---------------------|--------------------------|
+| **Tools** | ~80 (curated) | 1,093 (every endpoint) | **67 (matching official)** |
+| **Build time** | Months | ~6 seconds | ~6 seconds |
+| **Coverage** | Curated subset + GraphQL | Entire REST API | Same REST endpoints as official |
+| **Scope control** | Hardcoded in Go | None | `scope.yaml` (69 lines) |
+| **Tests** | Hand-written | 1,095 auto-generated | 200 auto-generated |
+
+### How the scope file works
+
+The scope file uses two mechanisms:
+1. `exclude_patterns: ["*"]` — excludes everything by default
+2. `enabled: true` on each tool we want — overrides the pattern for that specific tool
+
+```yaml
+# Exclude everything by default
+exclude_patterns: ["*"]
+
+capabilities:
+  # Only these tools are generated:
+  - name: repos_get_content             # official: get_file_contents
+    enabled: true
+  - name: issues_create                 # official: create_issue
+    enabled: true
+  - name: pulls_list                    # official: list_pull_requests
+    enabled: true
+  # ... 64 more tools
+```
+
+### Reproduce it
+
+```bash
+# Step 1: Install mcp-anything
+pip install mcp-anything
+
+# Step 2: Generate the scoped server
+mcp-anything generate \
+  https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json \
+  --name github-scoped --no-llm \
+  --scope-file examples/github-server-scoped/scope.yaml
+
+# Step 3: Install and run
+cd mcp-github-scoped-server
+pip install -e .
+export GITHUB_SCOPED_BASE_URL=https://api.github.com
+export GITHUB_SCOPED_API_KEY=ghp_your_token_here
+mcp-github-scoped
+```
+
+Or use **review mode** to curate your own subset interactively:
+```bash
+# Analyze and pause — writes scope.yaml with all 1,093 capabilities
+mcp-anything generate \
+  https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json \
+  --name github-custom --no-llm --review
+
+# Edit the scope file (set enabled: false on what you don't want)
+vim mcp-github-custom-server/scope.yaml
+
+# Resume — generates only the tools you kept
+mcp-anything generate \
+  https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json \
+  --name github-custom --resume
+```
+
+### Output
+
+```
+github-server-scoped/
+├── scope.yaml              # Scope file (checked into repo)
+├── src/mcp_github_scoped/
+│   ├── server.py           # FastMCP server entry point
+│   ├── backend.py          # httpx-based HTTP client with auth
+│   ├── tools/api.py        # 67 tool handlers
+│   ├── prompts.py          # MCP prompts
+│   └── resources.py        # MCP resources
+├── tests/                  # 200 auto-generated pytest tests
+├── AGENTS.md               # Tool index for coding agents
+├── mcp.json                # MCP client config
+└── pyproject.toml          # pip install -e .
+```
+
+### Tools not available via REST API
+
+These 11 official tools use GraphQL or Copilot-specific APIs and cannot be auto-generated from the OpenAPI spec:
+
+| Official tool | Reason |
+|---------------|--------|
+| `assign_copilot_to_issue` | Copilot-specific API |
+| `request_copilot_review` | Copilot-specific API |
+| `search_orgs` | No direct REST endpoint |
+| `list_discussions` | GraphQL only |
+| `get_discussion` | GraphQL only |
+| `get_discussion_comments` | GraphQL only |
+| `list_discussion_categories` | GraphQL only |
+| `projects_list` | GraphQL only |
+| `projects_get` | GraphQL only |
+| `projects_write` | GraphQL only |
+| `list_org_repository_security_advisories` | Org-level endpoint |
+
+---
+
 ## Generating your own
 
 ```bash
