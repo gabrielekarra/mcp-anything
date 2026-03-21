@@ -13,7 +13,7 @@ from mcp_anything.models.design import ServerDesign
 class GenerationManifest(BaseModel):
     """Persistent state for the generation pipeline."""
 
-    version: str = "0.1.2"
+    version: str = "0.1.3"
     codebase_path: str = ""
     output_dir: str = ""
     server_name: str = ""

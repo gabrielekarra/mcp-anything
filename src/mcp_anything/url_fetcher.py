@@ -133,7 +133,7 @@ def fetch_url(url: str, console: Console) -> tuple[Path, str]:
     try:
         req = Request(actual_url, headers={
             "Accept": "application/json, application/yaml, text/yaml, text/plain, */*",
-            "User-Agent": "mcp-anything/0.1.2",
+            "User-Agent": "mcp-anything/0.1.3",
         })
         with urlopen(req, timeout=30) as resp:
             content = resp.read().decode("utf-8", errors="replace")
