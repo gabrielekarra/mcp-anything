@@ -25,7 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # generate
     gen = subparsers.add_parser("generate", help="Run full 6-phase generation pipeline")
-    gen.add_argument("codebase_path", help="Path to source code or URL to an API spec")
+    gen.add_argument("codebase_path", nargs="?", default=None, help="Path to source code or URL to an API spec")
     gen.add_argument("-o", "--output-dir", type=Path, help="Output directory")
     gen.add_argument("--name", help="Override server name")
     gen.add_argument(
@@ -35,6 +35,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gen.add_argument("--phases", help="Comma-separated phases to run (e.g. analyze,design)")
     gen.add_argument("--resume", action="store_true", help="Resume from saved manifest")
+    gen.add_argument(
+        "--description",
+        action="store_true",
+        default=False,
+        help="Apply description overrides from descriptions.yaml and regenerate",
+    )
     gen.add_argument("--no-llm", action="store_true", help="Disable Claude API analysis")
     gen.add_argument("--no-install", action="store_true", help="Skip auto-installing dependencies")
     gen.add_argument(
@@ -107,6 +113,7 @@ def parse_options(args: argparse.Namespace) -> CLIOptions:
         backend=getattr(args, "backend", None),
         phases=args.phases.split(",") if getattr(args, "phases", None) else None,
         resume=getattr(args, "resume", False),
+        description=getattr(args, "description", False),
         no_llm=getattr(args, "no_llm", False),
         no_install=getattr(args, "no_install", False),
         verbose=getattr(args, "verbose", False),
@@ -138,6 +145,30 @@ def main() -> None:
 
         run_server(args.output_dir, args.transport, args.host, args.port, console)
         return
+
+    # --description without codebase_path: infer from current directory manifest
+    if getattr(args, "description", False) and args.codebase_path is None:
+        output_dir = getattr(args, "output_dir", None) or Path(".")
+        manifest_path = output_dir / "mcp-anything-manifest.json"
+        if not manifest_path.exists():
+            console.print(
+                "[red]Error:[/red] No manifest found in current directory. "
+                "Run from the generated server directory or pass --output-dir."
+            )
+            sys.exit(1)
+        from mcp_anything.models.manifest import GenerationManifest
+
+        manifest = GenerationManifest.load(manifest_path)
+        args.codebase_path = Path(manifest.codebase_path)
+        if not getattr(args, "output_dir", None):
+            args.output_dir = output_dir.resolve()
+        if not getattr(args, "name", None):
+            args.name = manifest.server_name
+
+    # Require codebase_path for non-description commands
+    if getattr(args, "codebase_path", None) is None:
+        console.print("[red]Error:[/red] codebase_path is required")
+        sys.exit(1)
 
     # Handle URL-based generation and local spec files
     source_url = None

@@ -27,7 +27,7 @@ def write_descriptions_file(design: "ServerDesign", path: Path) -> None:
 
     data = {"tools": tools}
     path.write_text(
-        "# Edit tool descriptions below. Run `mcp-anything generate --resume` to apply.\n"
+        "# Edit tool descriptions below. Run `mcp-anything generate --description` to apply.\n"
         + yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
     )
 

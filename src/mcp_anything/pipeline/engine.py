@@ -53,7 +53,7 @@ class PipelineEngine:
         output_dir = self.options.resolved_output_dir()
         manifest_path = output_dir / "mcp-anything-manifest.json"
 
-        if self.options.resume and manifest_path.exists():
+        if (self.options.resume or self.options.description) and manifest_path.exists():
             self.console.print(f"[cyan]Resuming from {manifest_path}[/cyan]")
             return GenerationManifest.load(manifest_path)
 
@@ -114,21 +114,26 @@ class PipelineEngine:
         if self.options.resume and manifest.phase_completed("analyze") and manifest.analysis:
             self._apply_scope_filtering(manifest, ctx)
 
-        # On resume: merge description overrides before IMPLEMENT
-        if self.options.resume and manifest.design:
+        # --description: merge description overrides and regenerate
+        if self.options.description and manifest.design:
             desc_path = Path(manifest.output_dir) / "descriptions.yaml"
-            if desc_path.exists():
-                count = merge_description_overrides(manifest.design, desc_path)
-                if count:
-                    # Re-run implement/document/package with updated descriptions
-                    for p in ("implement", "document", "package"):
-                        if p in manifest.completed_phases:
-                            manifest.completed_phases.remove(p)
-                    ctx.save_manifest()
-                    self.console.print(f"  Applied {count} description override(s) from descriptions.yaml")
+            if not desc_path.exists():
+                self.console.print(
+                    f"[red]Error:[/red] No descriptions.yaml found at {desc_path}"
+                )
+                return
+            count = merge_description_overrides(manifest.design, desc_path)
+            if count:
+                for p in ("implement", "document", "package"):
+                    if p in manifest.completed_phases:
+                        manifest.completed_phases.remove(p)
+                ctx.save_manifest()
+                self.console.print(f"  Applied {count} description override(s) from descriptions.yaml")
+            else:
+                self.console.print("  No description changes detected in descriptions.yaml")
 
         for phase in phases:
-            if self.options.resume and manifest.phase_completed(phase.name):
+            if (self.options.resume or self.options.description) and manifest.phase_completed(phase.name):
                 self.console.print(f"  [dim]Skipping {phase.name} (already completed)[/dim]")
                 continue
 

@@ -82,6 +82,50 @@ mcp-anything generate ./my-app --scope-file ./mcp-scope.yaml
 
 Patterns match against capability names, source file paths, and descriptions using glob syntax. In the scope file, you can also set `enabled: false` on individual capabilities for precise control.
 
+## Description overrides: customize tool descriptions
+
+Auto-generated descriptions come from source code (docstrings, OpenAPI summaries, route comments). They're usually good enough, but sometimes you want cleaner wording for your LLM agent.
+
+After generation, a `descriptions.yaml` file is written to the output directory with every tool and parameter description. Edit it, then re-run with `--description` to apply your changes:
+
+```bash
+# 1. Generate as usual
+mcp-anything generate ./my-app
+
+# 2. Edit descriptions
+vim mcp-my-app-server/descriptions.yaml
+```
+
+The file looks like this:
+
+```yaml
+# Edit tool descriptions below. Run `mcp-anything generate --description` to apply.
+tools:
+  list_users:
+    description: "List all users with optional filtering"
+    parameters:
+      role:
+        description: "Filter by user role"
+      limit:
+        description: "Max results to return"
+  create_user:
+    description: "Create a new user account"
+    parameters:
+      name:
+        description: "Full name of the user"
+```
+
+```bash
+# 3. Apply overrides — run from the generated server directory
+cd mcp-my-app-server
+mcp-anything generate --description
+
+# Or from anywhere, pointing to the output directory
+mcp-anything generate --description -o ./mcp-my-app-server
+```
+
+Only changed descriptions are applied. The pipeline detects edits and re-generates only the affected phases (implement, document, package), keeping everything else intact.
+
 ## Output
 
 ```

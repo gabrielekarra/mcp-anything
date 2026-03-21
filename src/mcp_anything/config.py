@@ -15,6 +15,7 @@ class CLIOptions(BaseModel):
     backend: Optional[str] = None
     phases: Optional[list[str]] = None
     resume: bool = False
+    description: bool = False  # apply description overrides from descriptions.yaml
     no_llm: bool = False
     no_install: bool = False
     verbose: bool = False
