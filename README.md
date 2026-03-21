@@ -198,7 +198,7 @@ See [ROADMAP.md](ROADMAP.md) for the full roadmap. See [CONTRIBUTING.md](CONTRIB
 
 <a href="https://www.star-history.com/?repos=gabrielekarra%2Fmcp-anything&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=Type-MCP/mcp-anything&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=gabrielekarra/mcp-anything&type=date&theme=dark&legend=top-left" />
    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=Type-MCP/mcp-anything&type=date&legend=top-left" />
    <img alt="Star History Chart" src="https://api.star-history.com/image?repos=Type-MCP/mcp-anything&type=date&legend=top-left" />
  </picture>
