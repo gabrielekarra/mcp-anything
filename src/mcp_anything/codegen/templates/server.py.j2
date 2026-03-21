@@ -27,19 +27,27 @@ except ImportError:
 {% if design.backend %}
 from {{ package_name }}.backend import Backend
 
-_backend = Backend()
+_backend: Backend | None = None
+
+
+def _get_backend() -> Backend:
+    """Lazily initialize the backend on first use."""
+    global _backend
+    if _backend is None:
+        _backend = Backend()
+    return _backend
 {% endif %}
 
 # Import and register tool modules
 {% for module_name in design.tool_modules %}
 from {{ package_name }}.tools.{{ module_name }} import register_tools as register_{{ module_name }}_tools
-register_{{ module_name }}_tools(server{% if design.backend %}, _backend{% endif %}{% if design.enable_telemetry %}, _tracer{% endif %})
+register_{{ module_name }}_tools(server{% if design.backend %}, _get_backend{% endif %}{% if design.enable_telemetry %}, _tracer{% endif %})
 {% endfor %}
 
 {% if design.resources %}
 # Import and register resources
 from {{ package_name }}.resources import register_resources
-register_resources(server{% if design.backend %}, _backend{% endif %})
+register_resources(server{% if design.backend %}, _get_backend{% endif %})
 {% endif %}
 
 {% if design.prompts %}

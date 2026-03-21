@@ -48,10 +48,12 @@ class Backend:
     """Communicates with {{ design.server_name }} via HTTP REST API."""
 
     def __init__(self) -> None:
-        self.base_url = os.environ.get(
-            f"{_ENV_PREFIX}_BASE_URL",
-            "http://{{ design.backend.host }}:{{ design.backend.port }}",
-        )
+        self.base_url = os.environ.get(f"{_ENV_PREFIX}_BASE_URL", "")
+        if not self.base_url:
+            raise RuntimeError(
+                f"Set the {_ENV_PREFIX}_BASE_URL environment variable to "
+                "the upstream API base URL (e.g. http://localhost:8080)."
+            )
         self.timeout = float(os.environ.get(
             f"{_ENV_PREFIX}_TIMEOUT", str(_DEFAULT_TIMEOUT),
         ))

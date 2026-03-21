@@ -363,6 +363,7 @@ class AnalyzePhase(Phase):
                 rails_results, rust_web_results,
                 graphql_results, grpc_results, websocket_results,
                 help_capabilities,
+                root=root,
             )
 
         # Override backend if forced
@@ -392,6 +393,7 @@ class AnalyzePhase(Phase):
         grpc_results: dict | None = None,
         websocket_results: dict | None = None,
         help_capabilities: list | None = None,
+        root: Path | None = None,
     ) -> AnalysisResult:
         """Generate AnalysisResult from all analyzers without LLM."""
         primary_ipc = None
@@ -420,7 +422,7 @@ class AnalyzePhase(Phase):
 
         # Add Java/Spring Boot capabilities
         if java_results:
-            java_caps = java_results_to_capabilities(java_results)
+            java_caps = java_results_to_capabilities(java_results, root=root)
             capabilities.extend(java_caps)
 
         # Add Flask/FastAPI capabilities

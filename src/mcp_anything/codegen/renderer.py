@@ -107,6 +107,16 @@ def _safe_docstring(value: str) -> str:
     return first_line
 
 
+def _param_model_name(param) -> str:
+    """Generate a PascalCase Pydantic model name for a param with nested properties."""
+    return _pascal_case(param.name) + "Input"
+
+
+def _has_properties(param) -> bool:
+    """Check if a param has nested properties (for Jinja2 test)."""
+    return bool(getattr(param, "properties", None))
+
+
 def create_jinja_env() -> Environment:
     """Create a configured Jinja2 environment for code generation."""
     templates_dir = Path(__file__).parent / "templates"
@@ -125,5 +135,7 @@ def create_jinja_env() -> Environment:
     env.filters["python_type"] = _python_type
     env.filters["default_value"] = _default_value
     env.filters["safe_docstring"] = _safe_docstring
+    env.filters["param_model_name"] = _param_model_name
+    env.tests["has_properties"] = _has_properties
 
     return env

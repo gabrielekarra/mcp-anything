@@ -16,7 +16,7 @@ _TOOL_METADATA = {
 }
 
 
-def register_resources(server: FastMCP{% if design.backend %}, backend{% endif %}) -> None:
+def register_resources(server: FastMCP{% if design.backend %}, _get_backend{% endif %}) -> None:
     """Register resources with the server."""
 
 {% for resource in design.resources %}
@@ -26,7 +26,7 @@ def register_resources(server: FastMCP{% if design.backend %}, backend{% endif %
     {% if resource.resource_type == "status" %}
         {% if design.backend and design.backend.backend_type.value == "cli" %}
         try:
-            version = await backend.run_cli(["--version"])
+            version = await _get_backend().run_cli(["--version"])
         except Exception:
             version = "unknown"
         return json.dumps({
@@ -79,12 +79,12 @@ def register_resources(server: FastMCP{% if design.backend %}, backend{% endif %
     {% elif resource.resource_type == "config" %}
         {% if design.backend and design.backend.backend_type.value == "cli" %}
         try:
-            config_output = await backend.run_cli(["--help"])
+            config_output = await _get_backend().run_cli(["--help"])
         except Exception:
             config_output = "Could not retrieve configuration"
         return json.dumps({
             "help": config_output,
-            "codebase_path": str(backend.codebase_path),
+            "codebase_path": str(_get_backend().codebase_path),
         }, indent=2)
         {% else %}
         return json.dumps({
@@ -113,7 +113,7 @@ def register_resources(server: FastMCP{% if design.backend %}, backend{% endif %
         }, indent=2)
     {% else %}
         {% if design.backend %}
-        return await backend.query("{{ resource.uri }}")
+        return await _get_backend().query("{{ resource.uri }}")
         {% else %}
         return json.dumps({"resource": "{{ resource.uri }}"})
         {% endif %}

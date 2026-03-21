@@ -8,6 +8,7 @@ from mcp_anything.config import CLIOptions
 from mcp_anything.models.manifest import GenerationManifest
 from mcp_anything.pipeline.context import PipelineContext
 from mcp_anything.pipeline.phase import Phase
+from mcp_anything.pipeline.descriptions import merge_description_overrides, write_descriptions_file
 from mcp_anything.pipeline.scope import apply_scope, write_scope_file
 
 
@@ -113,6 +114,19 @@ class PipelineEngine:
         if self.options.resume and manifest.phase_completed("analyze") and manifest.analysis:
             self._apply_scope_filtering(manifest, ctx)
 
+        # On resume: merge description overrides before IMPLEMENT
+        if self.options.resume and manifest.design:
+            desc_path = Path(manifest.output_dir) / "descriptions.yaml"
+            if desc_path.exists():
+                count = merge_description_overrides(manifest.design, desc_path)
+                if count:
+                    # Re-run implement/document/package with updated descriptions
+                    for p in ("implement", "document", "package"):
+                        if p in manifest.completed_phases:
+                            manifest.completed_phases.remove(p)
+                    ctx.save_manifest()
+                    self.console.print(f"  Applied {count} description override(s) from descriptions.yaml")
+
         for phase in phases:
             if self.options.resume and manifest.phase_completed(phase.name):
                 self.console.print(f"  [dim]Skipping {phase.name} (already completed)[/dim]")
@@ -159,6 +173,11 @@ class PipelineEngine:
 
                 # Apply scope filtering if any scope options are set
                 self._apply_scope_filtering(manifest, ctx)
+
+            # After DESIGN: write descriptions.yaml for user editing
+            if phase.name == "design" and manifest.design:
+                desc_path = Path(manifest.output_dir) / "descriptions.yaml"
+                write_descriptions_file(manifest.design, desc_path)
 
         self.console.print()
         self.console.print(f"[bold green]Done![/bold green] Output: {ctx.output_dir}")

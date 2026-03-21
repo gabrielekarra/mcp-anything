@@ -116,12 +116,14 @@ def apply_scope(
             filtered.append(cap)
             continue
 
-        # Build match targets: capability name, source file, description
+        # Build match targets: capability name, source file, description, HTTP path
         targets = [cap.name]
         if cap.source_file:
             targets.append(cap.source_file)
         if cap.description:
             targets.append(cap.description)
+        if cap.http_path:
+            targets.append(cap.http_path)
 
         # Include patterns: at least one target must match at least one pattern
         if all_include:

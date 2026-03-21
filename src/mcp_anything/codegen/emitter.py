@@ -147,7 +147,8 @@ class Emitter:
             if backend:
                 is_http_proxy = any(t.impl.strategy == "http_call" for t in self.design.tools)
                 if is_http_proxy:
-                    env[f"{env_prefix}_BASE_URL"] = f"http://{backend.host}:{backend.port}"
+                    detected = f"http://{backend.host}:{backend.port}" if backend.port else ""
+                    env[f"{env_prefix}_BASE_URL"] = detected or "http://localhost:PORT"
 
                 auth = backend.auth
                 if auth.auth_type in {"api_key", "bearer"} and auth.env_var_token:

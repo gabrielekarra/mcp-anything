@@ -386,7 +386,7 @@ class TestSpringBootCodegen:
         tool_path = tmp_path / "src" / "mcp_demo_api" / "tools" / "api.py"
         assert tool_path.exists()
         content = tool_path.read_text()
-        assert "backend.request" in content
+        assert "_get_backend().request" in content
         assert "/api/users" in content
         assert "GET" in content
         assert "POST" in content

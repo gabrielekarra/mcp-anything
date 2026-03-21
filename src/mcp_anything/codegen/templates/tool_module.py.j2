@@ -14,6 +14,38 @@ from mcp.server.fastmcp import FastMCP
 
 from {{ package_name }}.backend import BackendError
 {% endif %}
+{% set ns = namespace(has_models=false) %}
+{% for tool in tools %}
+{% for param in tool.parameters %}
+{% if param is has_properties %}
+{% set ns.has_models = true %}
+{% endif %}
+{% endfor %}
+{% endfor %}
+{% if ns.has_models %}
+
+from pydantic import BaseModel
+from typing import Optional
+{% set emitted_models = namespace(names=[]) %}
+{% for tool in tools %}
+{% for param in tool.parameters %}
+{% if param is has_properties and (param | param_model_name) not in emitted_models.names %}
+{% set _ = emitted_models.names.append(param | param_model_name) %}
+
+
+class {{ param | param_model_name }}(BaseModel):
+    """Schema for {{ param.name }} parameter."""
+{% for prop in param.properties %}
+{% if prop.required %}
+    {{ prop.name | safe_identifier }}: {{ prop.type | python_type }}
+{% else %}
+    {{ prop.name | safe_identifier }}: Optional[{{ prop.type | python_type }}] = None
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endfor %}
+{% endif %}
 
 # Instance cache for reusing class instances across tool calls
 _instance_cache: dict[str, object] = {}
@@ -112,7 +144,7 @@ def _load_source_module(codebase_path: str, module_path: str):
     return mod
 
 
-def register_tools(server: FastMCP{% if design.backend %}, backend{% endif %}{% if design.enable_telemetry %}, tracer=None{% endif %}) -> None:
+def register_tools(server: FastMCP{% if design.backend %}, _get_backend{% endif %}{% if design.enable_telemetry %}, tracer=None{% endif %}) -> None:
     """Register {{ module_name }} tools with the server."""
 {% if design.enable_telemetry %}
 
@@ -136,7 +168,13 @@ def register_tools(server: FastMCP{% if design.backend %}, backend{% endif %}{% 
 {% endif %}
     async def {{ tool.name }}(
     {% for param in tool.parameters | sort(attribute='required', reverse=true) %}
+    {% if param is has_properties %}
     {% if param.required %}
+        {{ param.name | safe_identifier }}: {{ param | param_model_name }},
+    {% else %}
+        {{ param.name | safe_identifier }}: {{ param | param_model_name }} | None = {{ param | default_value }},
+    {% endif %}
+    {% elif param.required %}
         {{ param.name | safe_identifier }}: {{ param.type | python_type }},
     {% else %}
         {{ param.name | safe_identifier }}: {{ param.type | python_type }} | None = {{ param | default_value }},
@@ -163,14 +201,18 @@ def register_tools(server: FastMCP{% if design.backend %}, backend{% endif %}{% 
         {% if tool.impl.arg_mapping.get(param.name, {}).get("style") == "path" %}
         path_params["{{ param.name }}"] = str({{ param.name | safe_identifier }})
         {% elif tool.impl.arg_mapping.get(param.name, {}).get("style") == "body" %}
+        {% if param is has_properties %}
+        request_body = {{ param.name | safe_identifier }}.model_dump() if hasattr({{ param.name | safe_identifier }}, "model_dump") else {{ param.name | safe_identifier }}
+        {% else %}
         request_body = {{ param.name | safe_identifier }} if isinstance({{ param.name | safe_identifier }}, dict) else {"data": {{ param.name | safe_identifier }}}
+        {% endif %}
         {% else %}
         if {{ param.name | safe_identifier }} is not None:
             query_params["{{ param.name }}"] = str({{ param.name | safe_identifier }})
         {% endif %}
         {% endfor %}
         try:
-            return await backend.request(
+            return await _get_backend().request(
                 "{{ tool.impl.http_method }}",
                 "{{ tool.impl.http_path }}",
                 params=query_params or None,
@@ -199,10 +241,10 @@ def register_tools(server: FastMCP{% if design.backend %}, backend{% endif %}{% 
             cmd_args.append(str({{ param.name | safe_identifier }}))
         {% endif %}
         {% endfor %}
-        return await backend.run_subcommand("{{ tool.impl.cli_subcommand }}", cmd_args)
+        return await _get_backend().run_subcommand("{{ tool.impl.cli_subcommand }}", cmd_args)
     {% elif tool.impl.strategy == "cli_function" %}
         # Call function via CLI backend: {{ tool.impl.cli_entry }}::{{ tool.impl.python_function }}
-        return await backend.run_function_as_cli(
+        return await _get_backend().run_function_as_cli(
             "{{ tool.impl.cli_entry }}",
             "{{ tool.impl.python_function }}",
         {% for param in tool.parameters %}
@@ -221,7 +263,7 @@ def register_tools(server: FastMCP{% if design.backend %}, backend{% endif %}{% 
             kwargs["{{ param.name }}"] = {{ param.name | safe_identifier }}
         {% endfor %}
         try:
-            return await backend.execute("{{ tool.name }}", **kwargs)
+            return await _get_backend().execute("{{ tool.name }}", **kwargs)
         except BackendError as exc:
             return json.dumps(exc.to_dict(), indent=2)
     {% elif tool.impl.strategy == "python_call" %}
@@ -278,7 +320,7 @@ def register_tools(server: FastMCP{% if design.backend %}, backend{% endif %}{% 
     {% else %}
         # Stub — implementation not yet generated
         {% if design.backend %}
-        return await backend.run_subcommand("{{ tool.name }}")
+        return await _get_backend().run_subcommand("{{ tool.name }}")
         {% else %}
         raise NotImplementedError("{{ tool.name }} not yet implemented")
         {% endif %}

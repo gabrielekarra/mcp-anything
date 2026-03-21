@@ -29,7 +29,7 @@ This server calls into the target application. Install its dependencies:
 This server proxies requests to an upstream HTTP service. Set this before starting:
 
 ```bash
-export {{ env_prefix }}_BASE_URL=http://{{ design.backend.host }}:{{ design.backend.port }}
+export {{ env_prefix }}_BASE_URL=http://localhost:PORT  # Replace with your API's actual URL
 ```
 
 **The upstream service must already be running** before you start this MCP server.

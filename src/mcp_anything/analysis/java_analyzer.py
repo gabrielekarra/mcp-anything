@@ -335,6 +335,7 @@ def _extract_spring_params(param_string: str) -> list[ParameterSpec]:
 
         name = ann.get("name", param_name)
         default_value = ann.get("defaultValue")
+        orig_type = None
 
         # Determine if required
         if annotation == "PathVariable":
@@ -342,6 +343,8 @@ def _extract_spring_params(param_string: str) -> list[ParameterSpec]:
         elif annotation == "RequestBody":
             required = True
             mcp_type = "object"
+            if base_type not in _JAVA_TYPE_MAP:
+                orig_type = base_type
         elif "required" in ann:
             required = ann["required"] == "true"
         elif annotation == "RequestParam":
@@ -355,20 +358,28 @@ def _extract_spring_params(param_string: str) -> list[ParameterSpec]:
             description="",
             required=required,
             default=default_value,
+            original_type=orig_type,
         ))
 
     return params
 
 
-def _extract_jaxrs_params(param_string: str) -> list[ParameterSpec]:
-    """Extract parameters from a JAX-RS method signature string."""
+def _extract_jaxrs_params(param_string: str, http_method: str = "GET") -> list[ParameterSpec]:
+    """Extract parameters from a JAX-RS method signature string.
+
+    In JAX-RS, unannotated parameters on POST/PUT/DELETE/PATCH methods are
+    implicitly treated as the request body.
+    """
     params: list[ParameterSpec] = []
+    annotated_spans: list[tuple[int, int]] = []
 
     for match in _JAXRS_PARAM_RE.finditer(param_string):
         annotation = match.group(1)  # QueryParam, PathParam, FormParam
         param_alias = match.group(2)  # name from annotation
         java_type = match.group(3).strip()
         param_name = match.group(4)
+
+        annotated_spans.append((match.start(), match.end()))
 
         base_type = java_type.split("<")[0].strip()
         mcp_type = _JAVA_TYPE_MAP.get(base_type, "string")
@@ -387,6 +398,37 @@ def _extract_jaxrs_params(param_string: str) -> list[ParameterSpec]:
             required=required,
             default=None,
         ))
+
+    # Detect unannotated params as implicit request body (JAX-RS convention)
+    if http_method in ("POST", "PUT", "DELETE", "PATCH"):
+        _UNANNOTATED_PARAM_RE = re.compile(
+            r'(?<!\w)([\w]+(?:<[\w<>,\s]+>)?)\s+(\w+)\s*(?:,|$)'
+        )
+        for match in _UNANNOTATED_PARAM_RE.finditer(param_string):
+            # Skip if this region overlaps with an annotated param
+            if any(s <= match.start() < e for s, e in annotated_spans):
+                continue
+            java_type = match.group(1).strip()
+            param_name = match.group(2)
+            # Skip JAX-RS context types
+            if java_type in (
+                "Context", "UriInfo", "HttpHeaders", "Request",
+                "SecurityContext", "HttpServletRequest", "HttpServletResponse",
+                "AsyncResponse",
+            ):
+                continue
+            base_type = java_type.split("<")[0].strip()
+            mcp_type = _JAVA_TYPE_MAP.get(base_type, "object")
+            # Store original type for POJO resolution
+            orig_type = base_type if mcp_type == "object" else None
+            params.append(ParameterSpec(
+                name=param_name,
+                type=mcp_type,
+                description="",
+                required=True,
+                default=None,
+                original_type=orig_type,
+            ))
 
     return params
 
@@ -636,6 +678,8 @@ def _analyze_jaxrs(source: str, file_info: FileInfo, result: JavaAnalysisResult)
         return
 
     class_path = class_match.group(1).rstrip("/")
+    if class_path and not class_path.startswith("/"):
+        class_path = "/" + class_path
     controller_name = class_match.group(2)
     result.controllers.append(controller_name)
 
@@ -657,7 +701,7 @@ def _analyze_jaxrs(source: str, file_info: FileInfo, result: JavaAnalysisResult)
         # Normalize JAX-RS regex path params: {id: \\d+} → {id}
         full_path = _strip_jaxrs_regex(full_path)
 
-        params = _extract_jaxrs_params(param_string)
+        params = _extract_jaxrs_params(param_string, http_method=http_method)
         mcp_return = _JAVA_TYPE_MAP.get(return_type, "string")
 
         result.endpoints.append(SpringEndpoint(
@@ -820,12 +864,56 @@ def _analyze_micronaut(source: str, file_info: FileInfo, result: JavaAnalysisRes
 # Capability conversion (framework-agnostic)
 # ---------------------------------------------------------------------------
 
+def _resolve_pojo_properties(
+    params: list[ParameterSpec],
+    pojo_sources: dict[str, str],
+) -> None:
+    """Resolve object params with original_type to nested properties using POJO sources."""
+    from mcp_anything.analysis.schema_extractor import extract_java_pojo_fields
+
+    for param in params:
+        if param.type != "object" or not param.original_type:
+            continue
+        type_name = param.original_type
+        # Search all sources for the class definition
+        for source in pojo_sources.values():
+            fields = extract_java_pojo_fields(source, type_name)
+            if fields:
+                param.properties = [
+                    ParameterSpec(
+                        name=f.name,
+                        type=f.type,
+                        description=f.description,
+                        required=f.required,
+                    )
+                    for f in fields
+                ]
+                break
+
+
 def java_results_to_capabilities(
     results: dict[str, JavaAnalysisResult],
+    root: Optional[Path] = None,
 ) -> list[Capability]:
     """Convert Java analysis results into Capability objects."""
     capabilities: list[Capability] = []
     seen: set[str] = set()
+
+    # Collect all Java/Kotlin source content for POJO resolution
+    pojo_sources: dict[str, str] = {}
+    if root:
+        for java_file in root.rglob("*.java"):
+            try:
+                rel = str(java_file.relative_to(root))
+                pojo_sources[rel] = java_file.read_text(errors="replace")
+            except OSError:
+                pass
+        for kt_file in root.rglob("*.kt"):
+            try:
+                rel = str(kt_file.relative_to(root))
+                pojo_sources[rel] = kt_file.read_text(errors="replace")
+            except OSError:
+                pass
 
     for file_path, result in results.items():
         for ep in result.endpoints:
@@ -834,6 +922,10 @@ def java_results_to_capabilities(
             if tool_name in seen:
                 continue
             seen.add(tool_name)
+
+            # Resolve POJO types to nested properties
+            if pojo_sources:
+                _resolve_pojo_properties(ep.parameters, pojo_sources)
 
             capabilities.append(Capability(
                 name=tool_name,
