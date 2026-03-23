@@ -199,12 +199,37 @@ def _build_tool_impl(cap: Capability, ipc_type: Optional[IPCType]) -> ToolImpl:
                 arg_mapping=arg_mapping,
             )
         elif ipc_type in (IPCType.PROTOCOL, IPCType.SOCKET):
+            # gRPC: populate service/method metadata for stub-based invocation
+            if cap.category == "grpc":
+                from pathlib import Path as _Path
+                service_name = cap.name.rsplit(".", 1)[0] if "." in cap.name else cap.name
+                method_name = cap.source_function or (cap.name.rsplit(".", 1)[1] if "." in cap.name else cap.name)
+                proto_module = _Path(cap.source_file).stem if cap.source_file else ""
+                return ToolImpl(
+                    strategy="protocol_call",
+                    grpc_service=service_name,
+                    grpc_method=method_name,
+                    grpc_proto_module=proto_module,
+                    arg_mapping=arg_mapping,
+                )
             # Protocol/Socket: communicate via the protocol backend
             return ToolImpl(strategy="protocol_call", arg_mapping=arg_mapping)
 
     # Fallback — for protocol/socket apps, use protocol_call instead of stub
     if ipc_type in (IPCType.PROTOCOL, IPCType.SOCKET):
         arg_mapping = {p.name: {"style": "param"} for p in cap.parameters}
+        if cap.category == "grpc":
+            from pathlib import Path as _Path
+            service_name = cap.name.rsplit(".", 1)[0] if "." in cap.name else cap.name
+            method_name = cap.source_function or (cap.name.rsplit(".", 1)[1] if "." in cap.name else cap.name)
+            proto_module = _Path(cap.source_file).stem if cap.source_file else ""
+            return ToolImpl(
+                strategy="protocol_call",
+                grpc_service=service_name,
+                grpc_method=method_name,
+                grpc_proto_module=proto_module,
+                arg_mapping=arg_mapping,
+            )
         return ToolImpl(strategy="protocol_call", arg_mapping=arg_mapping)
 
     return ToolImpl(strategy="stub")
@@ -321,6 +346,12 @@ def _build_backend_config(analysis: AnalysisResult, codebase_path: str = "") -> 
             if "framework" in mech.details:
                 config.env_vars["FRAMEWORK"] = mech.details["framework"]
             break
+
+    # WebSocket capabilities always need the websocket backend, not the generic HTTP one.
+    # The FastAPI detector sets PROTOCOL=http for all FastAPI apps (including WebSocket
+    # apps), so we override here when actual websocket endpoints were detected.
+    if any(cap.category == "websocket" for cap in analysis.capabilities):
+        config.env_vars["PROTOCOL"] = "websocket"
 
     # Build auth config for HTTP backends
     auth = _build_auth_config(analysis, codebase_path)
@@ -667,7 +698,10 @@ class DesignPhase(Phase):
             protocol = ""
             if backend and backend.env_vars.get("PROTOCOL"):
                 protocol = backend.env_vars["PROTOCOL"]
-            if protocol == "websocket" or not protocol:
+            if protocol == "grpc":
+                dependencies.append("grpcio>=1.50.0")
+                dependencies.append("protobuf>=4.21.0")
+            elif protocol == "websocket" or not protocol:
                 dependencies.append("websockets>=12.0")
         if enable_telemetry:
             dependencies.append("opentelemetry-api>=1.20")
@@ -677,7 +711,6 @@ class DesignPhase(Phase):
         if is_http:
             console.print("    Transport: HTTP (streamable)")
             console.print("    Telemetry: OpenTelemetry enabled")
-            console.print("    Docker: Dockerfile will be generated")
         for tool in tools:
             _assign_generation_status(tool, backend)
 
@@ -693,7 +726,6 @@ class DesignPhase(Phase):
             target_install_hint=target_install_hint,
             transport=transport,
             enable_telemetry=enable_telemetry,
-            generate_docker=is_http,
         )
 
         ctx.manifest.design = design

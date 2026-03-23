@@ -69,9 +69,21 @@ def _parse_routes_rb(root: Path) -> list[RailsEndpoint]:
             continue
 
         # scope '/api' do or scope :api do
+        # Note: scope with variable expressions (e.g. scope MyApp.prefix do) are skipped
         scope_match = re.match(r"scope\s+['\"]/?(\w+)['\"]", stripped)
         if scope_match:
             namespace_stack.append(scope_match.group(1))
+            continue
+
+        # scope :api do (symbol form)
+        scope_sym_match = re.match(r"scope\s+:(\w+)", stripped)
+        if scope_sym_match:
+            namespace_stack.append(scope_sym_match.group(1))
+            continue
+
+        # scope ... do with variable/expression — push placeholder so 'end' pops it
+        if re.match(r"scope\s+\w[\w.]+\s+do", stripped):
+            namespace_stack.append("")
             continue
 
         # end — pop namespace
@@ -79,7 +91,8 @@ def _parse_routes_rb(root: Path) -> list[RailsEndpoint]:
             namespace_stack.pop()
             continue
 
-        prefix = "/" + "/".join(namespace_stack) if namespace_stack else ""
+        non_empty = [p for p in namespace_stack if p]
+        prefix = "/" + "/".join(non_empty) if non_empty else ""
 
         # resources :users or resources :users, only: [:index, :show]
         res_match = re.match(r"resources?\s+:(\w+)(?:\s*,\s*only:\s*\[([^\]]+)\])?", stripped)
@@ -114,8 +127,11 @@ def _parse_routes_rb(root: Path) -> list[RailsEndpoint]:
             continue
 
         # Explicit routes: get '/path', to: 'controller#action'
+        # Also handles hash-rocket syntax: get '/path' => 'controller#action'
+        # Controller may be namespaced: 'active_storage/blobs/redirect#show'
         explicit_match = re.match(
-            r"(get|post|put|patch|delete)\s+['\"]([^'\"]+)['\"]\s*,\s*to:\s*['\"](\w+)#(\w+)['\"]",
+            r"(get|post|put|patch|delete)\s+['\"]([^'\"]+)['\"]\s*"
+            r"(?:,\s*to:\s*|=>\s*)['\"]([^'\"#]+)[#/](\w+)['\"]",
             stripped,
         )
         if explicit_match:

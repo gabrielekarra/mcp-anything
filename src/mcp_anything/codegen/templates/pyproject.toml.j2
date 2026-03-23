@@ -6,12 +6,21 @@ build-backend = "hatchling.build"
 name = "mcp-{{ design.server_name | kebab_case }}-server"
 version = "0.1.0"
 description = "{{ design.server_description | safe_docstring }}"
+authors = [
+    { name = "Type-MCP", email = "typemcp@gmail.com" },
+]
+readme = "README.md"
 requires-python = "{{ design.python_requires }}"
+license = "MIT"
 dependencies = [
 {% for dep in design.dependencies %}
     "{{ dep }}",
 {% endfor %}
 ]
+
+[project.urls]
+Homepage = "https://github.com/Type-MCP/mcp-anything"
+Repository = "https://github.com/Type-MCP/mcp-anything"
 
 [project.scripts]
 mcp-{{ design.server_name | kebab_case }} = "{{ package_name }}.server:main"

@@ -87,7 +87,6 @@ def _make_design(transport: str = "stdio") -> ServerDesign:
         backend=BackendConfig(backend_type=IPCType.PROTOCOL, port=8080),
         transport=transport,
         enable_telemetry=transport == "http",
-        generate_docker=transport == "http",
     )
 
 
@@ -238,24 +237,6 @@ class TestAgentsMd:
         emitter = Emitter(design, tmp_path)
         emitter.emit_docs()
         assert not (tmp_path / "AGENTS.md").exists()
-
-
-class TestDockerGeneration:
-    def test_dockerfile_generated_for_http(self, tmp_path):
-        design = _make_design("http")
-        emitter = Emitter(design, tmp_path)
-        emitter.emit_packaging()
-        dockerfile = tmp_path / "Dockerfile"
-        assert dockerfile.exists()
-        content = dockerfile.read_text()
-        assert "MCP_TRANSPORT=http" in content
-        assert "EXPOSE 8000" in content
-
-    def test_no_dockerfile_for_stdio(self, tmp_path):
-        design = _make_design("stdio")
-        emitter = Emitter(design, tmp_path)
-        emitter.emit_packaging()
-        assert not (tmp_path / "Dockerfile").exists()
 
 
 class TestMcpConfigTransport:

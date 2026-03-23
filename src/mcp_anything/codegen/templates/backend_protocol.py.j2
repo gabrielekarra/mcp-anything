@@ -35,7 +35,103 @@ class BackendError(Exception):
         }
 
 
-{% if protocol == 'websocket' %}
+{% set grpc_tools = design.tools | selectattr('impl.grpc_service') | list %}
+{% if protocol == 'grpc' %}
+class Backend:
+    """Calls {{ design.server_name }} via gRPC using compiled protobuf stubs.
+
+    Configure via environment variables:
+        {{ _ENV_PREFIX }}_GRPC_HOST  — server host (default: {{ design.backend.host or 'localhost' }})
+        {{ _ENV_PREFIX }}_GRPC_PORT  — server port (default: {{ design.backend.port or 50051 }})
+    """
+
+    # Map MCP tool name → (StubClass name, RPC method name, pb2 module stem)
+    _REGISTRY: dict[str, tuple[str, str, str]] = {
+{% for tool in grpc_tools %}
+        "{{ tool.name }}": ("{{ tool.impl.grpc_service }}Stub", "{{ tool.impl.grpc_method }}", "{{ tool.impl.grpc_proto_module }}"),
+{% endfor %}
+    }
+
+    def __init__(self) -> None:
+        self.host = os.environ.get(f"{_ENV_PREFIX}_GRPC_HOST", "{{ design.backend.host or 'localhost' }}")
+        self.port = int(os.environ.get(f"{_ENV_PREFIX}_GRPC_PORT", "{{ design.backend.port or 50051 }}"))
+        self._channel: Any = None
+        self._stubs: dict[str, Any] = {}
+
+    async def _get_stub(self, stub_class_name: str, proto_module: str) -> Any:
+        """Lazily create and cache a gRPC stub."""
+        cache_key = f"{stub_class_name}:{proto_module}"
+        if cache_key not in self._stubs:
+            import importlib
+            if self._channel is None:
+                import grpc.aio
+                self._channel = grpc.aio.insecure_channel(f"{self.host}:{self.port}")
+            grpc_mod = importlib.import_module(
+                f"{{ package_name }}.proto_stubs.{proto_module}_pb2_grpc"
+            )
+            stub_class = getattr(grpc_mod, stub_class_name)
+            self._stubs[cache_key] = stub_class(self._channel)
+        return self._stubs[cache_key]
+
+    async def execute(self, method: str, **kwargs: Any) -> str:
+        """Invoke a gRPC method and return the response as JSON.
+
+        Looks up the service stub and request type from the compiled proto stubs,
+        builds the request message from **kwargs, calls the RPC, and serialises
+        the response with google.protobuf.json_format.MessageToJson.
+        """
+        import importlib
+        from google.protobuf.json_format import MessageToJson
+
+        entry = self._REGISTRY.get(method)
+        if entry is None:
+            raise BackendError(
+                f"Unknown gRPC method '{method}'. "
+                f"Available: {list(self._REGISTRY)}"
+            )
+        stub_class_name, rpc_method, proto_module = entry
+
+        pb2_mod = importlib.import_module(
+            f"{{ package_name }}.proto_stubs.{proto_module}_pb2"
+        )
+        stub = await self._get_stub(stub_class_name, proto_module)
+
+        # Build the request message. By gRPC convention the request type is
+        # {RpcMethodName}Request (e.g. GetUser → GetUserRequest). Fall back
+        # to an empty message if no such class exists.
+        request_class_name = f"{rpc_method}Request"
+        request_class = getattr(pb2_mod, request_class_name, None)
+        if request_class is None:
+            # Try to find any message class whose fields match kwargs
+            for attr in dir(pb2_mod):
+                candidate = getattr(pb2_mod, attr)
+                if hasattr(candidate, "DESCRIPTOR") and hasattr(candidate, "MergeFrom"):
+                    request_class = candidate
+                    break
+        if request_class is None:
+            raise BackendError(
+                f"Cannot find request message class '{request_class_name}' "
+                f"in {proto_module}_pb2."
+            )
+
+        filtered = {k: v for k, v in kwargs.items() if v is not None}
+        request = request_class(**filtered)
+
+        rpc_fn = getattr(stub, rpc_method)
+        try:
+            response = await rpc_fn(request)
+        except Exception as exc:
+            raise BackendError(
+                f"gRPC call {rpc_method} failed: {exc}", method=method,
+            ) from exc
+
+        return MessageToJson(response, preserving_proto_field_name=True)
+
+    async def query(self, uri: str) -> str:
+        """Query a resource via gRPC."""
+        return await self.execute("query", uri=uri)
+
+{% elif protocol == 'websocket' %}
 class Backend:
     """Communicates with {{ design.server_name }} via WebSocket (JSON-RPC messages)."""
 

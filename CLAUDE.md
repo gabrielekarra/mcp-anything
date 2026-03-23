@@ -43,27 +43,43 @@ Located in `src/mcp_anything/analyzers/`:
 
 ---
 
-## Current Status (verified 2026-03-17)
+## Current Status (verified 2026-03-23)
 
 ### What's WORKING (tested end-to-end with real generation)
 
-All of these produce valid Python and install correctly:
+All of these produce valid Python and install correctly.
+All have integration tests + were validated against real open-source repositories.
 
-| Source Type | Detection | Tools | Status |
+| Source Type | Detection | Tools | Real Repo Tested |
 |---|---|---|---|
-| Python CLI (argparse) | 0.90 confidence | Correct | Working |
-| Flask REST | 0.95 | Routes → tools | Working |
-| FastAPI + Pydantic | 0.95 | Routes + params | Working |
-| Express.js | 0.95 | Routes → tools | Working |
-| Spring Boot | 0.95 | Annotations → tools | Working |
-| Go Gin | 0.95 | Routes → tools | Working |
-| Django DRF ViewSets | 0.95 | Actions → tools | Working |
-| OpenAPI 3.0 spec | 0.88 | Operations → tools | Working |
-| gRPC / Protobuf | 0.95 | RPCs → tools | Working |
-| GraphQL SDL | 0.95 | Queries/mutations → tools | Working |
-| Ruby on Rails | 0.95 | Resources → tools | Working |
-| Rust Actix | 0.95 | Macros → tools | Working |
-| WebSocket (raw) | 0.85 | Functions → protocol_call | Working |
+| Python CLI (argparse) | 0.90 confidence | Correct | httpie/httpie |
+| Flask REST | 0.95 | Routes → tools | synthetic fixture |
+| FastAPI + Pydantic | 0.95 | Routes + params | synthetic fixture |
+| Express.js | 0.95 | Routes → tools | synthetic fixture |
+| Spring Boot | 0.95 | Annotations → tools | synthetic fixture |
+| Go Gin | 0.95 | Routes → tools | synthetic fixture |
+| Go Echo | 0.95 | Routes → tools | labstack/echo |
+| Go Chi | 0.90 | Routes → tools | go-chi/chi |
+| Go gorilla/mux | 0.90 | Routes → tools | gorilla/mux (33 tools) |
+| Go net/http | 0.80 | Routes → tools | synthetic fixture |
+| Django DRF ViewSets | 0.95 | Actions → tools | synthetic fixture |
+| OpenAPI 3.0 spec | 0.88 | Operations → tools | GitHub API (1,093 tools) |
+| gRPC / Protobuf | 0.95 | RPCs → tools | synthetic fixture |
+| GraphQL SDL | 0.95 | Queries/mutations → tools | synthetic fixture |
+| Ruby on Rails | 0.95 | resources + explicit routes | rails/rails activestorage (9 tools) |
+| Rust Actix | 0.95 | Macros → tools | actix/examples (3 tools) |
+| Rust Axum | 0.95 | .route() → tools | tokio-rs/axum examples (36 tools) |
+| Rust Rocket | 0.95 | Macros → tools | SergioBenitez/Rocket examples (44 tools) |
+| JAX-RS / Quarkus | 0.90 | Annotations → tools | quarkusio/rest-json-quickstart (4 tools) |
+| Micronaut | 0.90 | Annotations → tools | micronaut-core benchmarks (2 tools) |
+| Kotlin Spring | 0.95 | Annotations → tools | synthetic fixture |
+| Kotlin JAX-RS | 0.90 | Annotations → tools | synthetic fixture |
+| Spring MVC | 0.95 | Annotations → tools | synthetic fixture |
+| TypeScript Express | 0.95 | Routes → tools | synthetic fixture |
+| Python Click CLI | 0.90 | Commands → tools | synthetic fixture |
+| Rust Warp | 0.80 | Filter chains → tools | synthetic fixture |
+| WebSocket (raw) | 0.85 | Functions → protocol_call | synthetic fixture |
+| Socket / XML-RPC | 0.85 | Functions → protocol_call | synthetic fixture |
 
 Working features:
 - All 5 pipeline phases execute
@@ -112,14 +128,56 @@ Working features:
   always returns `None` for optional params. Only explicitly provided values
   are sent to the backend.
 
-**Bug 6: Docker is template-only (LOW)**
-- Location: `src/mcp_anything/codegen/templates/Dockerfile.j2`
-- Problem: Dockerfile is generated but never validated (no build test).
-- Not a blocker — generating a Dockerfile the user can build manually is fine,
-  but the ROADMAP shouldn't mark "Docker packaging" as complete.
+**Bug 7: `analyze.py` missing `Path` import — FIXED 2026-03-23**
+- `AnalyzePhase._ast_fallback` used `Path | None` type hint but `Path` was never
+  imported. Caused `NameError: name 'Path' is not defined` at import time, blocking
+  all 25 integration tests. Fixed by adding `from pathlib import Path`.
+
+**Bug 8: Rust Rocket/Warp not supported in analyzer — FIXED 2026-03-23**
+- `rust_web_analyzer.py` returned `None` for any non-Actix/non-Axum Rust file.
+  Added `_ROCKET_MACRO_RE` (handles `#[get("/path")]` with optional extra attrs like
+  `data="<body>"`), `_normalize_rocket_path()` (converts `<id>` to `{id}`), and
+  basic Warp filter chain detection via `_WARP_FILTER_RE`.
+
+**Bug 11: WebSocket PROTOCOL env var overridden by FastAPI detector — FIXED 2026-03-23**
+- `fake_websocket_app` (FastAPI WebSocket) had `PROTOCOL=http` set by the FastAPI
+  detector, which caused `backend_protocol.py.j2` to render the generic
+  `{% else %}` stub (NotImplementedError) instead of the websocket branch.
+- Fixed in `design.py` `_build_backend_config()`: after processing IPC mechanism
+  details, if any capability has `category == 'websocket'`, override PROTOCOL to
+  'websocket'. This ensures WS apps always get the real WebSocket backend.
+
+**Bug 12: gRPC backend was an unimplemented stub — FIXED 2026-03-23**
+- gRPC tools used `protocol_call` strategy, but the protocol backend only had
+  websocket and mqtt branches. gRPC apps got the generic `{% else %}` stub with
+  `NotImplementedError`.
+- Fixed: added `ToolImpl.grpc_service`, `grpc_method`, `grpc_proto_module` fields.
+  `design.py` populates them from the capability name (`ServiceName.MethodName`).
+  `implement.py` compiles `.proto` files to `proto_stubs/` using `grpcio-tools`
+  if available. `backend_protocol.py.j2` now has a `{% elif protocol == 'grpc' %}`
+  branch that imports compiled stubs and makes real `grpc.aio` calls.
+
+**Bug 10: Emitter picks wrong backend for WebSocket apps — FIXED 2026-03-23**
+- `emitter.py` `_emit_backend()` checked `env_vars.get("PROTOCOL") == "http"` to decide
+  between `backend_http.py.j2` and `backend_protocol.py.j2`. HTTP detectors set
+  `PROTOCOL=http` for all web frameworks including FastAPI WebSocket apps, causing
+  the HTTP backend to be emitted for WebSocket tools. Since WebSocket tools call
+  `backend.execute()` which doesn't exist on the HTTP backend, every protocol_call
+  tool would raise `BackendError("no protocol mapping")` at runtime.
+- Fixed in `src/mcp_anything/codegen/emitter.py`: replaced the `env_vars` check
+  with pure tool-strategy logic: `is_http = has_http_tools and not has_protocol_tools`.
+
+**Bug 9: Rails explicit route syntax not supported — FIXED 2026-03-23**
+- `_parse_routes_rb` only matched `to: 'controller#action'` syntax but real Rails
+  apps (including Rails own engines) use `=> 'controller#action'` and namespaced
+  controllers like `'active_storage/blobs/redirect#show'`.
+  Also `scope <expression> do` (not just `scope 'string' do`) was not handled,
+  causing routes inside engine scope blocks to be silently skipped.
+  Fixed: regex now accepts both `to:` and `=>`, allows `/` in controller paths,
+  and pushes a placeholder for variable-expression scopes.
 
 ### ROADMAP accuracy — FIXED 2026-03-16
-- OTel marked complete, Docker wording clarified, v0.5.0 items moved to Completed
+- OTel marked complete, v0.5.0 items moved to Completed
 - Version bumped to 0.1.1
 
 ### Docs sync — FIXED 2026-03-17
@@ -163,16 +221,56 @@ Working features:
 - **28 tests** in `tests/test_scope.py` covering: file I/O, include/exclude patterns,
   scope file overrides, combined CLI+file patterns, edge cases, review/resume workflow.
 
-### Integration Test Coverage (updated 2026-03-20)
+### High-Confidence Framework Promotion — DONE (2026-03-23)
 
-434 total tests. `tests/test_integration.py` covers:
-- Python CLI (argparse), Flask, FastAPI, Django DRF
-- Express.js (including cross-file router mount prefix regression test)
-- Spring Boot, JAX-RS, Micronaut
-- Go Gin, Ruby Rails, Rust Actix
+**Root cause fixed**: `analyze.py` was missing `from pathlib import Path`, blocking
+all 25 integration tests with `NameError` at import time.
+
+**New framework coverage added** (fixtures + integration tests + real-repo validation):
+- **Rust Axum**: `fake_axum_app/`, real-tested against tokio-rs/axum (36 tools)
+- **Rust Rocket**: `fake_rocket_app/`, real-tested against SergioBenitez/Rocket (44 tools)
+  - Fixed: `_ROCKET_MACRO_RE` now handles extra attrs like `data="<body>"`
+  - Fixed: `_normalize_rocket_path()` converts `<id>` to `{id}` for path params
+- **Go Echo**: `fake_go_echo_app/`, real-tested against labstack/echo (22 tools)
+- **Go Chi**: `fake_go_chi_app/`, real-tested against go-chi/chi (15 tools)
+- **Go gorilla/mux**: `fake_go_mux_app/`, real-tested against gorilla/mux (33 tools)
+- **Go net/http**: `fake_go_nethttp_app/`, unit-tested
+- **Socket/XML-RPC**: `fake_socket_xmlrpc_app/`, integration test added
+- **Rails explicit routes**: `fake_rails_explicit_routes_app/` covering `=>`, `to:`,
+  `namespace`, `only:`, and variable-expression `scope`. Real-tested against
+  rails/rails activestorage (9 tools).
+
+### Full Framework Coverage — DONE (2026-03-23)
+
+All supported frameworks now have integration tests + real-repo or fixture validation.
+Remaining gap closed:
+- **Kotlin Spring** — `TestKotlinSpring` added (path params, 4+ tools)
+- **Kotlin JAX-RS** — `TestKotlinJaxRS` added (path params, 4+ tools)
+- **Spring MVC** — `TestSpringMVC` added (separate from Spring Boot test)
+- **TypeScript Express** — `TestTypeScriptExpress` added
+- **Python Click CLI** — `TestPythonClick` added (`cli_subcommand` strategy)
+- **Rust Warp** — `fake_warp_app` fixture created + `TestRustWarp` added
+
+### Integration Test Coverage (updated 2026-03-23)
+
+484 total tests. `tests/test_integration.py` covers every supported framework.
+`tests/test_functional.py` (35 tests) verifies tool functions **actually call the backend**
+with correct method/path/params by injecting mock backends into generated tool modules.
+`tests/test_e2e_http.py` (4 tests) proves end-to-end round-trips against real servers:
+HTTP (Flask→mock HTTP server), CLI (subprocess spawn), WebSocket (real WS JSON-RPC server),
+gRPC (real gRPC server with compiled proto stubs).
+Every supported framework has a functional test — not just a structural one.
+- Python CLI (argparse + Click), Flask, FastAPI, Django DRF
+- Express.js (JS + TypeScript, including cross-file router mount prefix regression)
+- Spring Boot, Spring MVC, JAX-RS, Micronaut
+- **Kotlin Spring, Kotlin JAX-RS**
+- **Go Gin, Go Echo, Go Chi, Go gorilla/mux, Go net/http** (all 5 Go frameworks)
+- **Ruby Rails** (resources + explicit `=>` + `to:` + namespace + only:)
+- **Rust Actix, Rust Axum, Rust Rocket, Rust Warp** (all 4 Rust frameworks)
 - OpenAPI 3.0 spec, GraphQL SDL, gRPC/Protobuf
 - **WebSocket protocol** (raw websockets library, protocol_call strategy)
-- HTTP transport (Dockerfile + SSE config)
+- **Socket/XML-RPC** (SimpleXMLRPCServer, socket IPC detection)
+- HTTP transport (SSE config)
 - stdio transport (command-based mcp.json)
 - Pipeline resume (partial run → resume completes remaining phases)
 - Manifest integrity (analysis + design populated, files tracked)

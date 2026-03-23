@@ -1,4 +1,4 @@
-"""Detect Rust web framework patterns (Actix, Axum) in Rust source files."""
+"""Detect Rust web framework patterns (Actix, Axum, Rocket, Warp) in Rust source files."""
 
 import re
 from pathlib import Path

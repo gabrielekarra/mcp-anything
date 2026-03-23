@@ -549,7 +549,7 @@ class TestWebSocketProtocol:
 # ---------------------------------------------------------------------------
 
 class TestHTTPTransport:
-    """Integration test: --transport http generates Dockerfile and Streamable HTTP config."""
+    """Integration test: --transport http generates Streamable HTTP config."""
 
     @pytest.mark.asyncio
     async def test_http_transport(self, fake_flask_app, tmp_output):
@@ -559,9 +559,6 @@ class TestHTTPTransport:
 
         assert manifest.design is not None
         assert manifest.design.transport == "http"
-
-        # Dockerfile should exist for HTTP transport
-        assert (tmp_output / "Dockerfile").exists(), "Dockerfile missing for HTTP transport"
 
         # mcp.json should have URL instead of command
         import json
@@ -859,3 +856,330 @@ class TestScopeFiltering:
         # Generated code is valid
         syntax_errors = _validate_python_syntax(tmp_output)
         assert syntax_errors == [], f"Syntax errors: {syntax_errors}"
+
+
+# ---------------------------------------------------------------------------
+# Tests — Additional Rust backends (Axum, Rocket)
+# ---------------------------------------------------------------------------
+
+class TestRailsExplicitRoutes:
+    """Integration test: Rails with explicit to:, =>, namespace, and only: routes."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_rails_explicit_routes_app, tmp_output):
+        manifest = await _run_pipeline(fake_rails_explicit_routes_app, tmp_output)
+
+        _full_assertions(
+            manifest, tmp_output,
+            expected_tools={"get_users", "post_users", "get_status"},
+            expected_strategy="http_call",
+            min_tools=8,
+        )
+
+        # Hash-rocket routes should be extracted
+        tool_names = _get_tool_names(manifest)
+        assert any("legacy" in n or "items" in n for n in tool_names), (
+            f"Expected legacy/items routes from => syntax, got: {tool_names}"
+        )
+        # Namespaced routes
+        assert any("orders" in n for n in tool_names), (
+            f"Expected namespaced api/orders routes, got: {tool_names}"
+        )
+
+
+class TestRustAxum:
+    """Integration test: Rust Axum web framework."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_axum_app, tmp_output):
+        manifest = await _run_pipeline(fake_axum_app, tmp_output)
+
+        _full_assertions(
+            manifest, tmp_output,
+            expected_tools={"get_users", "post_users", "get_health"},
+            expected_strategy="http_call",
+            min_tools=4,
+        )
+
+        # Verify Axum routes have the right HTTP methods
+        design = manifest.design
+        http_tools = {t.name: t for t in design.tools if t.impl.strategy == "http_call"}
+        assert "get_users" in http_tools
+        assert http_tools["get_users"].impl.http_method == "GET"
+
+
+class TestRustRocket:
+    """Integration test: Rust Rocket web framework."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_rocket_app, tmp_output):
+        manifest = await _run_pipeline(fake_rocket_app, tmp_output)
+
+        _full_assertions(
+            manifest, tmp_output,
+            expected_tools={"get_users", "post_users", "get_health"},
+            expected_strategy="http_call",
+            min_tools=4,
+        )
+
+        # Verify a parameterized route was extracted
+        tool_names = _get_tool_names(manifest)
+        # Rocket uses <id> syntax → should appear as get_users_by_id or similar
+        assert any("by_id" in n or "user" in n for n in tool_names), (
+            f"Expected user-parameterized tool, got: {tool_names}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests — Additional Go backends (Echo, Chi, gorilla/mux, net/http)
+# ---------------------------------------------------------------------------
+
+class TestGoEcho:
+    """Integration test: Go Echo web framework."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_go_echo_app, tmp_output):
+        manifest = await _run_pipeline(fake_go_echo_app, tmp_output)
+
+        tool_names = _get_tool_names(manifest)
+        assert any("users" in n for n in tool_names), (
+            f"Expected user-related tools, got: {tool_names}"
+        )
+        assert len(tool_names) >= 4
+
+        design = manifest.design
+        pkg_name = _package_name(design.server_name)
+        _assert_standard_structure(tmp_output, pkg_name)
+        syntax_errors = _validate_python_syntax(tmp_output)
+        assert syntax_errors == [], f"Syntax errors:\n" + "\n".join(syntax_errors)
+        server_mod = _import_server(tmp_output, pkg_name)
+        assert hasattr(server_mod, "server")
+
+
+class TestGoChi:
+    """Integration test: Go Chi web framework."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_go_chi_app, tmp_output):
+        manifest = await _run_pipeline(fake_go_chi_app, tmp_output)
+
+        tool_names = _get_tool_names(manifest)
+        assert any("users" in n for n in tool_names), (
+            f"Expected user-related tools, got: {tool_names}"
+        )
+        assert len(tool_names) >= 4
+
+        design = manifest.design
+        pkg_name = _package_name(design.server_name)
+        _assert_standard_structure(tmp_output, pkg_name)
+        syntax_errors = _validate_python_syntax(tmp_output)
+        assert syntax_errors == [], f"Syntax errors:\n" + "\n".join(syntax_errors)
+        server_mod = _import_server(tmp_output, pkg_name)
+        assert hasattr(server_mod, "server")
+
+
+class TestGoMux:
+    """Integration test: Go gorilla/mux web framework."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_go_mux_app, tmp_output):
+        manifest = await _run_pipeline(fake_go_mux_app, tmp_output)
+
+        _full_assertions(
+            manifest, tmp_output,
+            expected_tools={"get_users", "post_users", "get_health"},
+            expected_strategy="http_call",
+            min_tools=4,
+        )
+
+
+class TestGoNetHTTP:
+    """Integration test: Go standard net/http (no framework)."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_go_nethttp_app, tmp_output):
+        manifest = await _run_pipeline(fake_go_nethttp_app, tmp_output)
+
+        tool_names = _get_tool_names(manifest)
+        assert any("users" in n or "health" in n or "products" in n for n in tool_names), (
+            f"Expected route tools, got: {tool_names}"
+        )
+        assert len(tool_names) >= 3
+
+        design = manifest.design
+        pkg_name = _package_name(design.server_name)
+        _assert_standard_structure(tmp_output, pkg_name)
+        syntax_errors = _validate_python_syntax(tmp_output)
+        assert syntax_errors == [], f"Syntax errors:\n" + "\n".join(syntax_errors)
+        server_mod = _import_server(tmp_output, pkg_name)
+        assert hasattr(server_mod, "server")
+
+
+# ---------------------------------------------------------------------------
+# Tests — Socket / XML-RPC backend
+# ---------------------------------------------------------------------------
+
+class TestSocketXMLRPC:
+    """Integration test: Python XML-RPC server via SimpleXMLRPCServer."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_socket_xmlrpc_app, tmp_output):
+        manifest = await _run_pipeline(fake_socket_xmlrpc_app, tmp_output)
+
+        # XML-RPC should be detected as SOCKET IPC
+        assert manifest.analysis is not None
+        mechanisms = [m.ipc_type.value for m in manifest.analysis.ipc_mechanisms]
+        assert "socket" in mechanisms, f"Expected socket IPC, got: {mechanisms}"
+
+        # Should produce tools from the registered functions
+        tool_names = _get_tool_names(manifest)
+        assert len(tool_names) >= 4, f"Expected >= 4 tools, got: {tool_names}"
+        assert any("item" in n for n in tool_names), (
+            f"Expected item-related tools, got: {tool_names}"
+        )
+
+        # Structure and syntax valid
+        design = manifest.design
+        pkg_name = _package_name(design.server_name)
+        _assert_standard_structure(tmp_output, pkg_name)
+        syntax_errors = _validate_python_syntax(tmp_output)
+        assert syntax_errors == [], f"Syntax errors:\n" + "\n".join(syntax_errors)
+        server_mod = _import_server(tmp_output, pkg_name)
+        assert hasattr(server_mod, "server")
+
+# ---------------------------------------------------------------------------
+# Tests — Kotlin backends (Spring, JAX-RS)
+# ---------------------------------------------------------------------------
+
+class TestKotlinSpring:
+    """Integration test: Kotlin + Spring Boot REST controller."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_kotlin_spring_app, tmp_output):
+        manifest = await _run_pipeline(fake_kotlin_spring_app, tmp_output)
+
+        _full_assertions(
+            manifest, tmp_output,
+            expected_tools={"get_users", "post_users"},
+            expected_strategy="http_call",
+            min_tools=4,
+        )
+
+        tool_names = _get_tool_names(manifest)
+        assert any("by_id" in n for n in tool_names), (
+            f"Expected path-param tool (by_id), got: {tool_names}"
+        )
+
+
+class TestKotlinJaxRS:
+    """Integration test: Kotlin + JAX-RS resource."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_kotlin_jaxrs_app, tmp_output):
+        manifest = await _run_pipeline(fake_kotlin_jaxrs_app, tmp_output)
+
+        _full_assertions(
+            manifest, tmp_output,
+            expected_tools={"get_items", "post_items"},
+            expected_strategy="http_call",
+            min_tools=4,
+        )
+
+        tool_names = _get_tool_names(manifest)
+        assert any("by_id" in n for n in tool_names), (
+            f"Expected path-param tool (by_id), got: {tool_names}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests — Spring MVC (separate from Spring Boot)
+# ---------------------------------------------------------------------------
+
+class TestSpringMVC:
+    """Integration test: Spring MVC REST controller."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_spring_mvc_app, tmp_output):
+        manifest = await _run_pipeline(fake_spring_mvc_app, tmp_output)
+
+        _full_assertions(
+            manifest, tmp_output,
+            expected_tools={"get_products", "post_products"},
+            expected_strategy="http_call",
+            min_tools=3,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests — TypeScript Express
+# ---------------------------------------------------------------------------
+
+class TestTypeScriptExpress:
+    """Integration test: TypeScript Express server."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_ts_express_app, tmp_output):
+        manifest = await _run_pipeline(fake_ts_express_app, tmp_output)
+
+        _full_assertions(
+            manifest, tmp_output,
+            expected_tools={"get_products", "post_orders"},
+            expected_strategy="http_call",
+            min_tools=4,
+        )
+
+        tool_names = _get_tool_names(manifest)
+        assert any("by_id" in n or "users" in n for n in tool_names), (
+            f"Expected parameterized or users tool, got: {tool_names}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests — Python Click CLI
+# ---------------------------------------------------------------------------
+
+class TestPythonClick:
+    """Integration test: Python Click CLI application."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_click_app, tmp_output):
+        manifest = await _run_pipeline(fake_click_app, tmp_output)
+
+        _full_assertions(
+            manifest, tmp_output,
+            expected_tools={"fetch", "convert"},
+            expected_strategy="cli_subcommand",
+            min_tools=2,
+        )
+
+        assert manifest.analysis is not None
+        ipc_types = {m.ipc_type for m in manifest.analysis.ipc_mechanisms}
+        assert any("cli" in str(t).lower() for t in ipc_types), (
+            f"Expected CLI IPC detection, got: {ipc_types}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests — Rust Warp
+# ---------------------------------------------------------------------------
+
+class TestRustWarp:
+    """Integration test: Rust Warp web framework."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_warp_app, tmp_output):
+        manifest = await _run_pipeline(fake_warp_app, tmp_output)
+
+        tool_names = _get_tool_names(manifest)
+        assert len(tool_names) >= 3, f"Expected >= 3 tools, got: {tool_names}"
+        assert any("users" in n or "health" in n or "products" in n for n in tool_names), (
+            f"Expected route-named tools, got: {tool_names}"
+        )
+
+        design = manifest.design
+        pkg_name = _package_name(design.server_name)
+        _assert_standard_structure(tmp_output, pkg_name)
+        syntax_errors = _validate_python_syntax(tmp_output)
+        assert syntax_errors == [], "Syntax errors:\n" + "\n".join(syntax_errors)
+        server_mod = _import_server(tmp_output, pkg_name)
+        assert hasattr(server_mod, "server")

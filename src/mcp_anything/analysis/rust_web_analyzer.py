@@ -1,6 +1,6 @@
 """Regex-based analyzer for Rust web framework endpoints.
 
-Supports Actix-web and Axum route extraction.
+Supports Actix-web, Axum, Rocket, and Warp route extraction.
 """
 
 import re
@@ -10,6 +10,13 @@ from typing import Optional
 
 from mcp_anything.models.analysis import Capability, FileInfo, IPCType, Language, ParameterSpec
 from mcp_anything.analysis.route_utils import endpoint_to_tool_name, normalize_path, make_description
+
+
+def _normalize_rocket_path(path: str) -> str:
+    """Normalize Rocket's <param> path syntax to {param} style."""
+    # Rocket uses <param> and <param..> (multi-segment) for path params
+    path = re.sub(r"<(\w+)(?:\.\.)?(?::[^>]+)?>", r"{\1}", path)
+    return path
 
 
 @dataclass
@@ -69,6 +76,34 @@ _AXUM_CHAIN_RE = re.compile(
 # Axum nest: .nest("/prefix", router)
 _AXUM_NEST_RE = re.compile(
     r'\.nest\s*\(\s*["\']([^"\']+)["\']\s*,\s*(\w+)',
+)
+
+# Axum method chaining on a single route: .route("/p", get(h1).post(h2).delete(h3))
+_AXUM_CHAIN_METHOD_RE = re.compile(
+    r'(get|post|put|delete|patch)\s*\(\s*(\w+)\s*\)',
+)
+
+# Rocket attribute macros — fn may or may not be async, may have extra attrs
+# Handles: #[get("/path")], #[post("/path", data="<body>")], #[put("/path", format="json")]
+_ROCKET_MACRO_RE = re.compile(
+    r'#\[(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']'
+    r'(?:\s*,\s*[^)]*?)?\s*\)\s*\]\s*'
+    r'(?:pub\s+)?(?:async\s+)?fn\s+(\w+)',
+    re.DOTALL,
+)
+
+# Rocket rocket::build().mount("/base", routes![handler, ...])
+_ROCKET_MOUNT_RE = re.compile(
+    r'\.mount\s*\(\s*["\']([^"\']+)["\']\s*,\s*routes!\s*\[([^\]]+)\]',
+)
+
+# Warp path filter: warp::path("segment").and(warp::get()).map(handler)
+# Captures each segment + method combination
+_WARP_FILTER_RE = re.compile(
+    r'warp::path\s*\(\s*["\']([^"\']+)["\']\s*\)'
+    r'(?:[^;]{0,300}?)'
+    r'warp::(get|post|put|delete|patch)\s*\(\)',
+    re.DOTALL,
 )
 
 # Extract path params from Actix/Axum function signatures:
@@ -158,6 +193,10 @@ def analyze_rust_web_file(
         result.framework = "actix"
     elif "axum::" in source:
         result.framework = "axum"
+    elif "rocket::" in source or "#[launch]" in source or "rocket::build" in source:
+        result.framework = "rocket"
+    elif "warp::" in source:
+        result.framework = "warp"
     else:
         return None
 
@@ -206,7 +245,7 @@ def analyze_rust_web_file(
             ))
 
     elif result.framework == "axum":
-        # Axum .route() style
+        # Axum .route() with single handler: .route("/path", get(handler))
         for match in _AXUM_ROUTE_RE.finditer(source):
             path = match.group(1)
             http_method = match.group(2).upper()
@@ -229,6 +268,70 @@ def analyze_rust_web_file(
                 parameters=all_params,
                 source_file=file_info.path,
                 framework="axum",
+            ))
+
+        # Axum chained handlers: .route("/path", get(h1).post(h2).delete(h3))
+        for chain_match in _AXUM_CHAIN_RE.finditer(source):
+            path = chain_match.group(1)
+            chain_str = chain_match.group(2)
+            path_params = _extract_path_params(path)
+
+            for method_match in _AXUM_CHAIN_METHOD_RE.finditer(chain_str):
+                http_method = method_match.group(1).upper()
+                handler = method_match.group(2)
+
+                seen = {p.name for p in path_params}
+                all_params = list(path_params)
+                for p in _extract_handler_params(source, handler):
+                    if p.name not in seen:
+                        all_params.append(p)
+
+                result.routes.append(RustEndpoint(
+                    http_method=http_method,
+                    path=path,
+                    function_name=handler,
+                    description=make_description(handler),
+                    parameters=all_params,
+                    source_file=file_info.path,
+                    framework="axum",
+                ))
+
+    elif result.framework == "rocket":
+        # Rocket attribute macros: #[get("/path")] or #[post("/path", data="<body>")]
+        for match in _ROCKET_MACRO_RE.finditer(source):
+            http_method = match.group(1).upper()
+            raw_path = match.group(2)
+            handler = match.group(3)
+
+            # Normalize <param> to {param} so _extract_path_params finds them
+            path = _normalize_rocket_path(raw_path)
+            path_params = _extract_path_params(path)
+
+            result.routes.append(RustEndpoint(
+                http_method=http_method,
+                path=path,
+                function_name=handler,
+                description=make_description(handler),
+                parameters=path_params,
+                source_file=file_info.path,
+                framework="rocket",
+            ))
+
+    elif result.framework == "warp":
+        # Warp path + method filter: warp::path("segment").and(warp::get())
+        for match in _WARP_FILTER_RE.finditer(source):
+            path_segment = match.group(1)
+            http_method = match.group(2).upper()
+            path = f"/{path_segment}"
+
+            result.routes.append(RustEndpoint(
+                http_method=http_method,
+                path=path,
+                function_name=path_segment,
+                description=make_description(path_segment),
+                parameters=[],
+                source_file=file_info.path,
+                framework="warp",
             ))
 
     return result if result.routes else None

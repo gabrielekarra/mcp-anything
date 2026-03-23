@@ -59,8 +59,6 @@ class Emitter:
         start = len(self.generated_files)
         self._emit_pyproject()
         self._emit_mcp_json()
-        if self.design.generate_docker or self.design.transport == "http":
-            self._emit_dockerfile()
         return self.generated_files[start:]
 
     def _emit_package_init(self) -> None:
@@ -83,13 +81,13 @@ class Emitter:
         if not self.design.backend:
             return
         backend_type = self.design.backend.backend_type.value
-        # Check if this is an HTTP/REST backend (Spring Boot, etc.)
-        is_http = False
-        if self.design.backend.env_vars.get("PROTOCOL") == "http":
-            is_http = True
-        # Also check if any tools use http_call strategy
-        if any(t.impl.strategy == "http_call" for t in self.design.tools):
-            is_http = True
+        # Use tool strategies (not env_vars) to determine backend template.
+        # env_vars.get("PROTOCOL") == "http" is unreliable — HTTP detectors set it
+        # for all web frameworks including FastAPI WebSocket apps, which use
+        # protocol_call tools and need the protocol backend, not the HTTP one.
+        has_http_tools = any(t.impl.strategy == "http_call" for t in self.design.tools)
+        has_protocol_tools = any(t.impl.strategy == "protocol_call" for t in self.design.tools)
+        is_http = has_http_tools and not has_protocol_tools
 
         template_map = {
             "socket": "backend_socket.py.j2",
@@ -172,6 +170,3 @@ class Emitter:
         content = self._render("pyproject.toml.j2")
         self._write("pyproject.toml", content)
 
-    def _emit_dockerfile(self) -> None:
-        content = self._render("Dockerfile.j2")
-        self._write("Dockerfile", content)

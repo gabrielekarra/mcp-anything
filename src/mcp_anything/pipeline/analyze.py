@@ -1,5 +1,7 @@
 """Phase 1: ANALYZE — scan codebase and detect IPC mechanisms."""
 
+from pathlib import Path
+
 from mcp_anything.analysis.ast_analyzer import (
     analyze_python_file,
     ast_results_to_capabilities,

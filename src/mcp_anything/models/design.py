@@ -24,6 +24,10 @@ class ToolImpl(BaseModel):
     # For http_call: HTTP method and path
     http_method: str = ""  # GET, POST, PUT, DELETE, PATCH
     http_path: str = ""    # e.g. /api/users/{id}
+    # For gRPC protocol_call tools: service class, RPC method, and stub module
+    grpc_service: str = ""       # e.g. "UserService"
+    grpc_method: str = ""        # e.g. "GetUser"
+    grpc_proto_module: str = ""  # stem of the .proto file, e.g. "user"
     # Mapping of tool param names to CLI argument forms
     # e.g. {"input_path": {"position": 0}, "format": {"flag": "--format"}}
     arg_mapping: dict[str, dict] = Field(default_factory=dict)
@@ -111,5 +115,4 @@ class ServerDesign(BaseModel):
     http_host: str = "0.0.0.0"
     http_port: int = 8000
     enable_telemetry: bool = False
-    generate_docker: bool = False
     generate_agents_md: bool = True

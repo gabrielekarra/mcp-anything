@@ -106,5 +106,55 @@ def fake_ws_protocol_app(fixtures_dir) -> Path:
 
 
 @pytest.fixture
+def fake_axum_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_axum_app"
+
+
+@pytest.fixture
+def fake_rocket_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_rocket_app"
+
+
+@pytest.fixture
+def fake_go_echo_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_go_echo_app"
+
+
+@pytest.fixture
+def fake_go_chi_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_go_chi_app"
+
+
+@pytest.fixture
+def fake_go_mux_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_go_mux_app"
+
+
+@pytest.fixture
+def fake_go_nethttp_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_go_nethttp_app"
+
+
+@pytest.fixture
+def fake_socket_xmlrpc_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_socket_xmlrpc_app"
+
+
+@pytest.fixture
+def fake_rails_explicit_routes_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_rails_explicit_routes_app"
+
+
+@pytest.fixture
+def fake_click_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_click_app"
+
+
+@pytest.fixture
+def fake_warp_app(fixtures_dir) -> Path:
+    return fixtures_dir / "fake_warp_app"
+
+
+@pytest.fixture
 def tmp_output(tmp_path) -> Path:
     return tmp_path / "output"

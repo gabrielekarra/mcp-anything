@@ -58,13 +58,25 @@ def run_server(
         console.print(f"    Listening on http://{host}:{port}")
 
     import os
+
+    # If proto_stubs exist, add that directory to PYTHONPATH so any residual
+    # bare imports (e.g. from manually-compiled or cached stubs) still resolve.
+    proto_stubs_dir = src_dir / package_name / "proto_stubs"
+    if proto_stubs_dir.exists():
+        env_vars["PYTHONPATH"] = os.pathsep.join([
+            str(src_dir),
+            str(proto_stubs_dir),
+        ])
+
     run_env = {**os.environ, **env_vars}
 
     try:
-        subprocess.run(
+        result = subprocess.run(
             [sys.executable, "-m", f"{package_name}.server"],
             cwd=str(output_dir),
             env=run_env,
         )
+        if result.returncode not in (0, -2):  # -2 = SIGINT (Ctrl-C)
+            console.print(f"[red]Server exited with code {result.returncode}[/red]")
     except KeyboardInterrupt:
         console.print("\n    Server stopped.")
