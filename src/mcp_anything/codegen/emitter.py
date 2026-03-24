@@ -42,6 +42,7 @@ class Emitter:
         self._emit_models()
         self._emit_state()
         self._emit_backend()
+        self._emit_bridge_component()
         self._emit_tool_modules()
         self._emit_resource_modules()
         self._emit_prompt_modules()
@@ -81,6 +82,14 @@ class Emitter:
         if not self.design.backend:
             return
         backend_type = self.design.backend.backend_type.value
+        protocol = self.design.backend.env_vars.get("PROTOCOL", "")
+
+        # Zustand bridge: runs a WebSocket SERVER, not a client
+        if protocol == "zustand":
+            content = self._render("backend_zustand.py.j2")
+            self._write(f"src/{self.package_name}/backend.py", content)
+            return
+
         # Use tool strategies (not env_vars) to determine backend template.
         # env_vars.get("PROTOCOL") == "http" is unreliable — HTTP detectors set it
         # for all web frameworks including FastAPI WebSocket apps, which use
@@ -100,6 +109,38 @@ class Emitter:
         if template_name:
             content = self._render(template_name)
             self._write(f"src/{self.package_name}/backend.py", content)
+
+    def _emit_bridge_component(self) -> None:
+        """Emit the McpBridge React component for Zustand-based apps."""
+        import json as _json
+
+        protocol = self.design.backend.env_vars.get("PROTOCOL", "") if self.design.backend else ""
+        if protocol != "zustand":
+            return
+
+        # Load store metadata detected during analysis (hook names + import paths)
+        meta_str = self.design.backend.env_vars.get("ZUSTAND_STORE_META", "[]") if self.design.backend else "[]"
+        try:
+            store_imports = _json.loads(meta_str)
+        except Exception:
+            store_imports = []
+
+        # Fallback: derive store names from tool names if metadata is missing
+        if not store_imports:
+            seen: set[str] = set()
+            for t in self.design.tools:
+                if t.impl.strategy == "protocol_call":
+                    store_name = t.name.split("_")[0]
+                    if store_name not in seen:
+                        seen.add(store_name)
+                        store_imports.append({
+                            "name": store_name,
+                            "hook_name": f"use{store_name.capitalize()}",
+                            "import_path": f"../../store/use-{store_name}",
+                        })
+
+        content = self._render("bridge_zustand.tsx.j2", zustand_store_imports=store_imports)
+        self._write("bridge/McpBridge.tsx", content)
 
     def _emit_tool_modules(self) -> None:
         for module_name, tool_names in self.design.tool_modules.items():

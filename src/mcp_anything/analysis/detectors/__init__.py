@@ -18,6 +18,7 @@ from mcp_anything.analysis.detectors.rails_detector import RailsDetector
 from mcp_anything.analysis.detectors.rust_web_detector import RustWebDetector
 from mcp_anything.analysis.detectors.socket_detector import SocketDetector
 from mcp_anything.analysis.detectors.spring_detector import SpringDetector
+from mcp_anything.analysis.detectors.zustand_detector import ZustandDetector
 
 ALL_DETECTORS: list[type[Detector]] = [
     CLIDetector,
@@ -37,6 +38,7 @@ ALL_DETECTORS: list[type[Detector]] = [
     GraphQLDetector,
     GRPCDetector,
     FileDetector,
+    ZustandDetector,
 ]
 
 __all__ = [
@@ -58,5 +60,6 @@ __all__ = [
     "GraphQLDetector",
     "GRPCDetector",
     "FileDetector",
+    "ZustandDetector",
     "ALL_DETECTORS",
 ]

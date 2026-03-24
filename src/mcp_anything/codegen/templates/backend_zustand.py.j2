@@ -1,0 +1,218 @@
+"""Zustand bridge backend for {{ design.server_name }}.
+
+This backend runs a local WebSocket server that the browser app connects to.
+When an MCP tool is called, it forwards the command to the browser's Zustand
+stores and awaits the result.
+
+Setup:
+1. Add the generated bridge/McpBridge.tsx component to your app.
+2. Start this MCP server: mcp-{{ design.server_name | replace('_', '-') }}
+3. Open your app in the browser — it will auto-connect to ws://localhost:{{ design.backend.port or 9001 }}.
+"""
+
+import asyncio
+import json
+import logging
+import os
+import uuid
+from typing import Any
+
+logger = logging.getLogger("{{ design.server_name }}")
+
+_ENV_PREFIX = "{{ design.server_name | upper | replace('-', '_') | replace(' ', '_') }}"
+_DEFAULT_BRIDGE_PORT = {{ design.backend.port or 9001 }}
+_DEFAULT_TIMEOUT = 30
+
+
+class BackendError(Exception):
+    """Structured error from the Zustand bridge backend."""
+
+    def __init__(self, message: str, method: str = "", response_body: str = "") -> None:
+        self.method = method
+        self.response_body = response_body
+        super().__init__(message)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "error": str(self),
+            "method": self.method,
+            "response_body": self.response_body,
+        }
+
+
+class _BridgeServer:
+    """WebSocket server that the browser's McpBridge component connects to."""
+
+    def __init__(self, port: int) -> None:
+        self.port = port
+        self._clients: set[Any] = set()
+        self._pending: dict[str, asyncio.Future] = {}
+        self._server: Any = None
+
+    async def start(self) -> None:
+        import websockets
+        self._server = await websockets.serve(self._handler, "localhost", self.port)
+        logger.info(
+            "[{{ design.server_name }}] Bridge server listening on ws://localhost:%d — "
+            "open your app to connect",
+            self.port,
+        )
+
+    async def _handler(self, websocket: Any) -> None:
+        self._clients.add(websocket)
+        logger.info(
+            "[{{ design.server_name }}] Browser connected (%d client(s))",
+            len(self._clients),
+        )
+        try:
+            async for raw in websocket:
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    logger.warning("Received non-JSON: %s", str(raw)[:200])
+                    continue
+
+                request_id = data.get("id")
+                if request_id and request_id in self._pending:
+                    fut = self._pending.pop(request_id)
+                    if not fut.done():
+                        fut.set_result(data)
+        finally:
+            self._clients.discard(websocket)
+            logger.info(
+                "[{{ design.server_name }}] Browser disconnected (%d client(s))",
+                len(self._clients),
+            )
+
+    async def call(self, store: str, action: str, args: dict, timeout: float) -> Any:
+        if not self._clients:
+            raise BackendError(
+                "No browser client connected. "
+                "Make sure your app is open and McpBridge is mounted.",
+                method=f"{store}.{action}",
+            )
+
+        request_id = str(uuid.uuid4())
+        loop = asyncio.get_event_loop()
+        future: asyncio.Future = loop.create_future()
+        self._pending[request_id] = future
+
+        payload = json.dumps({
+            "id": request_id,
+            "store": store,
+            "action": action,
+            "args": {k: v for k, v in args.items() if v is not None},
+        })
+
+        import websockets as _ws
+        for client in list(self._clients):
+            try:
+                await client.send(payload)
+            except _ws.exceptions.ConnectionClosed:
+                self._clients.discard(client)
+
+        try:
+            result = await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError:
+            self._pending.pop(request_id, None)
+            raise BackendError(
+                f"Timed out after {timeout}s waiting for browser response: {store}.{action}",
+                method=f"{store}.{action}",
+            )
+
+        if not result.get("success", True):
+            raise BackendError(
+                result.get("error", "Unknown error from browser"),
+                method=f"{store}.{action}",
+            )
+
+        return result.get("data")
+
+
+_bridge: _BridgeServer | None = None
+_bridge_lock: asyncio.Lock | None = None
+
+
+async def _ensure_bridge() -> _BridgeServer:
+    global _bridge, _bridge_lock
+    if _bridge_lock is None:
+        _bridge_lock = asyncio.Lock()
+    async with _bridge_lock:
+        if _bridge is None:
+            port = int(os.environ.get(f"{_ENV_PREFIX}_BRIDGE_PORT", str(_DEFAULT_BRIDGE_PORT)))
+            _bridge = _BridgeServer(port)
+            await _bridge.start()
+    return _bridge
+
+
+class Backend:
+    """Forwards MCP tool calls to the browser's Zustand stores via WebSocket.
+
+    The browser must have McpBridge mounted (see bridge/McpBridge.tsx).
+
+    Environment variables:
+        {{ _ENV_PREFIX }}_BRIDGE_PORT — WebSocket listen port (default: {{ design.backend.port or 9001 }})
+        {{ _ENV_PREFIX }}_TIMEOUT     — Call timeout in seconds (default: 30)
+    """
+
+    def __init__(self) -> None:
+        self.timeout = float(
+            os.environ.get(f"{_ENV_PREFIX}_TIMEOUT", str(_DEFAULT_TIMEOUT))
+        )
+
+    @staticmethod
+    def _parse_method(method: str) -> tuple[str, str]:
+        """Convert a tool name to (store, camelCaseAction).
+
+        Accepts both formats:
+        - "scene.createNode"          → ("scene", "createNode")
+        - "scene_create_node"         → ("scene", "createNode")
+        """
+        if "." in method:
+            store, action = method.split(".", 1)
+            return store, action
+
+        # snake_case tool name: split on first underscore to get store name,
+        # then convert the rest to camelCase.
+        # e.g. "scene_create_node" → store="scene", action="createNode"
+        #      "viewer_set_show_grid" → store="viewer", action="setShowGrid"
+        idx = method.index("_")
+        store = method[:idx]
+        snake_action = method[idx + 1:]
+        parts = snake_action.split("_")
+        action = parts[0] + "".join(w.capitalize() for w in parts[1:])
+        return store, action
+
+    async def execute(self, method: str, **kwargs: Any) -> str:
+        """Forward a Zustand action to the browser and return the result as JSON.
+
+        Args:
+            method: tool name in either "scene_create_node" or "scene.createNode" format.
+            **kwargs: Action arguments forwarded to the Zustand store action.
+        """
+        bridge = await _ensure_bridge()
+
+        try:
+            store, action = self._parse_method(method)
+        except (ValueError, IndexError):
+            raise BackendError(
+                f"Cannot parse method name '{method}'",
+                method=method,
+            )
+
+        try:
+            result = await bridge.call(store, action, dict(kwargs), self.timeout)
+        except BackendError:
+            raise
+        except Exception as exc:
+            raise BackendError(
+                f"Bridge error on {method}: {exc}", method=method,
+            ) from exc
+
+        if result is None:
+            return "ok"
+        return json.dumps(result, indent=2) if not isinstance(result, str) else result
+
+    async def query(self, uri: str) -> str:
+        """Return the current scene state."""
+        return await self.execute("scene.getState")

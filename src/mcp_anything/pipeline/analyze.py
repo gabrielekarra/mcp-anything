@@ -54,6 +54,11 @@ from mcp_anything.analysis.websocket_analyzer import (
     analyze_websocket_file,
     websocket_results_to_capabilities,
 )
+from mcp_anything.analysis.zustand_analyzer import (
+    analyze_zustand_file,
+    detect_zustand_import_path,
+    zustand_results_to_capabilities,
+)
 from mcp_anything.analysis.llm_analyzer import llm_analyze
 from mcp_anything.analysis.scanner import scan_codebase
 from mcp_anything.models.analysis import (
@@ -342,6 +347,44 @@ class AnalyzePhase(Phase):
             ws_count = sum(len(r.endpoints) for r in websocket_results.values())
             console.print(f"    WebSocket: {ws_count} endpoints")
 
+        # 3m. Zustand store analysis
+        zustand_results = {}
+        for fi in js_ts_files:
+            z_result = analyze_zustand_file(root, fi)
+            if z_result and z_result.stores:
+                zustand_results[fi.path] = z_result
+                fi.is_api_surface = True
+
+        if zustand_results:
+            store_count = sum(len(r.stores) for r in zustand_results.values())
+            action_count = sum(
+                len(s.actions) for r in zustand_results.values() for s in r.stores
+            )
+            console.print(f"    Zustand: {store_count} stores, {action_count} actions")
+
+            # Detect npm import paths for each store so the emitter can generate
+            # a fully working bridge component without user modification.
+            import json as _json
+            store_meta = []
+            seen_hooks: set[str] = set()
+            for z_result in zustand_results.values():
+                for store in z_result.stores:
+                    if store.hook_name in seen_hooks:
+                        continue
+                    seen_hooks.add(store.hook_name)
+                    import_path = detect_zustand_import_path(root, store.source_file, store.hook_name)
+                    # Skip stores whose import path is a relative fallback — those are
+                    # internal implementation details not exported from any package.
+                    if import_path.startswith("."):
+                        continue
+                    store_meta.append({
+                        "name": store.name,
+                        "hook_name": store.hook_name,
+                        "import_path": import_path,
+                    })
+            ctx.manifest.extra_data = ctx.manifest.extra_data or {}
+            ctx.manifest.extra_data["zustand_store_meta"] = _json.dumps(store_meta)
+
         # 4. LLM analysis (if enabled)
         llm_result = None
         if not ctx.options.no_llm:
@@ -366,6 +409,7 @@ class AnalyzePhase(Phase):
                 graphql_results, grpc_results, websocket_results,
                 help_capabilities,
                 root=root,
+                zustand_results=zustand_results,
             )
 
         # Override backend if forced
@@ -396,6 +440,7 @@ class AnalyzePhase(Phase):
         websocket_results: dict | None = None,
         help_capabilities: list | None = None,
         root: Path | None = None,
+        zustand_results: dict | None = None,
     ) -> AnalysisResult:
         """Generate AnalysisResult from all analyzers without LLM."""
         primary_ipc = None
@@ -471,6 +516,11 @@ class AnalyzePhase(Phase):
         if websocket_results:
             ws_caps = websocket_results_to_capabilities(websocket_results)
             capabilities.extend(ws_caps)
+
+        # Add Zustand store capabilities
+        if zustand_results:
+            z_caps = zustand_results_to_capabilities(zustand_results)
+            capabilities.extend(z_caps)
 
         # Add OpenAPI capabilities
         if openapi_capabilities:

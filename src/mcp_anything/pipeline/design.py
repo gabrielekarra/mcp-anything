@@ -88,6 +88,11 @@ def _assign_generation_status(tool: ToolSpec, backend: Optional[BackendConfig]) 
             tool.generation_notes = "Proxies requests over the generated WebSocket JSON-RPC backend."
             return tool
 
+        if protocol == "zustand":
+            tool.generation_status = "proxy"
+            tool.generation_notes = "Forwards action to the browser's Zustand store via the generated WebSocket bridge."
+            return tool
+
         if protocol == "mqtt":
             tool.generation_status = "scaffolded"
             tool.generation_notes = "MQTT transport was detected, but the generated backend still requires message wiring."
@@ -110,6 +115,15 @@ def _assign_generation_status(tool: ToolSpec, backend: Optional[BackendConfig]) 
 
 def _build_tool_impl(cap: Capability, ipc_type: Optional[IPCType]) -> ToolImpl:
     """Determine the best implementation strategy for a capability."""
+    # Zustand store action: always protocol_call via the WebSocket bridge.
+    # Must be checked before the generic python_call path, which would
+    # incorrectly try to import the TypeScript source file as a Python module.
+    if cap.category == "zustand_action":
+        return ToolImpl(
+            strategy="protocol_call",
+            arg_mapping={p.name: {"style": "param"} for p in cap.parameters},
+        )
+
     # HTTP endpoint: capability came from Spring Boot / REST analysis
     if cap.category == "api" and cap.ipc_type == IPCType.PROTOCOL:
         http_method = cap.http_method or "GET"
@@ -352,6 +366,10 @@ def _build_backend_config(analysis: AnalysisResult, codebase_path: str = "") -> 
     # apps), so we override here when actual websocket endpoints were detected.
     if any(cap.category == "websocket" for cap in analysis.capabilities):
         config.env_vars["PROTOCOL"] = "websocket"
+
+    # Zustand store capabilities need the zustand bridge backend.
+    if any(cap.category == "zustand_action" for cap in analysis.capabilities):
+        config.env_vars["PROTOCOL"] = "zustand"
 
     # Build auth config for HTTP backends
     auth = _build_auth_config(analysis, codebase_path)
@@ -670,6 +688,13 @@ class DesignPhase(Phase):
         # Build backend config
         backend = _build_backend_config(analysis, ctx.manifest.codebase_path)
 
+        # For Zustand apps: forward store import metadata into backend env_vars so
+        # the emitter can generate a fully working bridge component.
+        if backend and backend.env_vars.get("PROTOCOL") == "zustand":
+            zustand_meta = (ctx.manifest.extra_data or {}).get("zustand_store_meta")
+            if zustand_meta:
+                backend.env_vars["ZUSTAND_STORE_META"] = zustand_meta
+
         # Detect target project install hint
         target_install_hint = _detect_target_install(ctx.codebase_path)
         if target_install_hint:
@@ -701,7 +726,7 @@ class DesignPhase(Phase):
             if protocol == "grpc":
                 dependencies.append("grpcio>=1.50.0")
                 dependencies.append("protobuf>=4.21.0")
-            elif protocol == "websocket" or not protocol:
+            elif protocol in {"websocket", "zustand"} or not protocol:
                 dependencies.append("websockets>=12.0")
         if enable_telemetry:
             dependencies.append("opentelemetry-api>=1.20")
