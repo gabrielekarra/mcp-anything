@@ -6,6 +6,7 @@ from mcp_anything.analysis.openapi_analyzer import (
     find_openapi_specs,
     parse_openapi_spec,
     extract_server_info,
+    extract_security_schemes,
 )
 from mcp_anything.models.analysis import FileInfo, IPCMechanism, IPCType
 
@@ -57,6 +58,19 @@ class OpenAPIDetector(Detector):
             details.update(server_info)
             details["framework"] = "openapi"
             details["spec_file"] = rel_path
+
+            # Extract auth scheme so it survives manifest serialization (needed for --resume
+            # and for design phase when spec file may no longer be accessible)
+            if "auth_type" not in details:
+                schemes = extract_security_schemes(spec)
+                if schemes:
+                    scheme = schemes[0]
+                    auth_type = scheme.get("type", "")
+                    if auth_type:
+                        details["auth_type"] = auth_type
+                        if auth_type == "api_key":
+                            details["auth_header"] = scheme.get("header", "")
+                            details["auth_location"] = scheme.get("location", "header")
 
         if not evidence:
             return []

@@ -63,6 +63,9 @@ class Backend:
     def _build_auth_headers(self) -> dict[str, str]:
         """Build authentication headers from environment variables."""
         headers: dict[str, str] = {}
+        token = os.environ.get("GITHUB_TOKEN", "")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         return headers
 
     async def _get_client(self) -> httpx.AsyncClient:
