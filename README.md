@@ -49,6 +49,47 @@ mcp-my-app  # server runs on http://localhost:8000/sse
 }
 ```
 
+## What's supported
+
+mcp-anything detects and wraps source code across 8 ecosystems — REST frameworks, CLI tools, API specs, and protocol-based services.
+
+| Ecosystem | Framework / Source | Confidence |
+|---|---|---|
+| **Python** | argparse CLI | 0.90 |
+| | Click CLI | 0.90 |
+| | Typer CLI | 0.85 |
+| | Flask | 0.95 |
+| | FastAPI | 0.95 |
+| | Django REST Framework | 0.95 |
+| **Java / Kotlin** | Spring Boot (Java + Kotlin) | 0.95 |
+| | Spring MVC (Java + Kotlin) | 0.85 |
+| | JAX-RS / Quarkus (Java + Kotlin) | 0.90 |
+| | Micronaut | 0.90 |
+| **JavaScript / TypeScript** | Express.js | 0.95 |
+| **Go** | Gin | 0.95 |
+| | Echo | 0.95 |
+| | Chi | 0.95 |
+| | Fiber | 0.95 |
+| | gorilla/mux | 0.90 |
+| | net/http | 0.85 |
+| **Ruby** | Rails | 0.95 |
+| **Rust** | Actix-web | 0.95 |
+| | Axum | 0.95 |
+| | Rocket | 0.95 |
+| | Warp | 0.90 |
+| **API Specs** | OpenAPI 3.x / Swagger 2.x | 0.88 |
+| | GraphQL SDL | 0.95 |
+| | gRPC / Protobuf | 0.95 |
+| **Protocol / IPC** | WebSocket (JSON-RPC) | 0.85 |
+| | MQTT / paho-mqtt | 0.90 |
+| | ZeroMQ | 0.90 |
+| | XML-RPC / raw socket | 0.90 |
+| | D-Bus | 0.90 |
+
+> Pass a URL directly for API specs: `mcp-anything generate https://api.example.com/openapi.json`
+
+---
+
 ## Scoping: control what gets exposed
 
 Large codebases can have hundreds or thousands of endpoints. You don't want all of them as MCP tools. Three mechanisms let you control scope:
