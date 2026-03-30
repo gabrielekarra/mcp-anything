@@ -196,21 +196,23 @@ def register_tools(server: FastMCP{% if design.backend %}, _get_backend{% endif 
         # HTTP {{ tool.impl.http_method }} {{ tool.impl.http_path }}
         path_params: dict[str, str] = {}
         query_params: dict[str, str] = {}
-        request_body: dict | None = None
+        _body_fields: dict = {}
         {% for param in tool.parameters %}
         {% if tool.impl.arg_mapping.get(param.name, {}).get("style") == "path" %}
         path_params["{{ param.name }}"] = str({{ param.name | safe_identifier }})
         {% elif tool.impl.arg_mapping.get(param.name, {}).get("style") == "body" %}
-        {% if param is has_properties %}
-        request_body = {{ param.name | safe_identifier }}.model_dump() if hasattr({{ param.name | safe_identifier }}, "model_dump") else {{ param.name | safe_identifier }}
-        {% else %}
-        request_body = {{ param.name | safe_identifier }} if isinstance({{ param.name | safe_identifier }}, dict) else {"data": {{ param.name | safe_identifier }}}
-        {% endif %}
+        if {{ param.name | safe_identifier }} is not None:
+            {% if param is has_properties %}
+            _body_fields["{{ param.name }}"] = {{ param.name | safe_identifier }}.model_dump() if hasattr({{ param.name | safe_identifier }}, "model_dump") else {{ param.name | safe_identifier }}
+            {% else %}
+            _body_fields["{{ param.name }}"] = {{ param.name | safe_identifier }}
+            {% endif %}
         {% else %}
         if {{ param.name | safe_identifier }} is not None:
             query_params["{{ param.name }}"] = str({{ param.name | safe_identifier }})
         {% endif %}
         {% endfor %}
+        request_body: dict | None = _body_fields if _body_fields else None
         try:
             return await _get_backend().request(
                 "{{ tool.impl.http_method }}",

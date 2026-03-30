@@ -2,6 +2,7 @@
 
 import json
 import re
+from pathlib import Path
 from typing import Optional
 
 from mcp_anything.models.analysis import AnalysisResult, Capability, IPCType, ParameterSpec
@@ -51,13 +52,13 @@ def _assign_generation_status(tool: ToolSpec, backend: Optional[BackendConfig]) 
         return tool
 
     if tool.impl.strategy == "http_call":
-        tool.generation_status = "proxy"
-        tool.generation_notes = "Proxies requests to the detected HTTP API."
+        tool.generation_status = "ready"
+        tool.generation_notes = "Calls the detected HTTP API endpoint."
         return tool
 
     if tool.impl.strategy in {"cli_subcommand", "cli_function"}:
-        tool.generation_status = "proxy"
-        tool.generation_notes = "Proxies requests to the detected CLI entry point."
+        tool.generation_status = "ready"
+        tool.generation_notes = "Invokes the detected CLI entry point."
         return tool
 
     if tool.impl.strategy == "protocol_call":
@@ -70,13 +71,13 @@ def _assign_generation_status(tool: ToolSpec, backend: Optional[BackendConfig]) 
             return tool
 
         if backend.backend_type == IPCType.SOCKET:
-            tool.generation_status = "proxy"
-            tool.generation_notes = "Proxies requests over the generated socket backend."
+            tool.generation_status = "ready"
+            tool.generation_notes = "Calls the target over the generated socket backend."
             return tool
 
         if backend.backend_type == IPCType.FILE:
             tool.generation_status = "scaffolded"
-            tool.generation_notes = "Uses file handoff files and requires an external worker to consume them."
+            tool.generation_notes = "Uses file handoff and requires an external worker to consume commands."
             tool.manual_steps = [
                 "Run a companion process that reads .mcp_command.json and writes .mcp_result.json.",
             ]
@@ -84,31 +85,31 @@ def _assign_generation_status(tool: ToolSpec, backend: Optional[BackendConfig]) 
 
         protocol = backend.env_vars.get("PROTOCOL", "")
         if protocol in {"", "websocket"}:
-            tool.generation_status = "proxy"
-            tool.generation_notes = "Proxies requests over the generated WebSocket JSON-RPC backend."
+            tool.generation_status = "ready"
+            tool.generation_notes = "Calls the target over the generated WebSocket JSON-RPC backend."
             return tool
 
         if protocol == "zustand":
-            tool.generation_status = "proxy"
-            tool.generation_notes = "Forwards action to the browser's Zustand store via the generated WebSocket bridge."
+            tool.generation_status = "ready"
+            tool.generation_notes = "Forwards actions to the browser's Zustand store via the generated WebSocket bridge."
             return tool
 
         if protocol == "mqtt":
             tool.generation_status = "scaffolded"
-            tool.generation_notes = "MQTT transport was detected, but the generated backend still requires message wiring."
+            tool.generation_notes = "MQTT transport detected; the generated backend still requires message wiring."
             tool.manual_steps = [
                 "Override Backend.execute() with MQTT publish/subscribe request handling.",
             ]
             return tool
 
         tool.generation_status = "scaffolded"
-        tool.generation_notes = f"{protocol} transport was detected, but the generated backend is scaffolding only."
+        tool.generation_notes = f"{protocol} transport detected; the generated backend is scaffolding only."
         tool.manual_steps = [
             f"Implement Backend.execute() for the detected {protocol} protocol.",
         ]
         return tool
 
-    tool.generation_status = "proxy"
+    tool.generation_status = "ready"
     tool.generation_notes = "Uses the generated backend adapter."
     return tool
 
@@ -139,7 +140,10 @@ def _build_tool_impl(cap: Capability, ipc_type: Optional[IPCType]) -> ToolImpl:
         for p in cap.parameters:
             if "{" + p.name + "}" in http_path:
                 arg_mapping[p.name] = {"style": "path"}
-            elif p.type == "object":
+            elif p.location == "body":
+                arg_mapping[p.name] = {"style": "body"}
+            elif p.type == "object" and not p.location:
+                # Fallback for non-OpenAPI analyzers that don't set location
                 arg_mapping[p.name] = {"style": "body"}
             else:
                 arg_mapping[p.name] = {"style": "query"}
@@ -322,6 +326,47 @@ def _build_auth_config(analysis: AnalysisResult, codebase_path: str = "") -> Aut
     return AuthConfig()
 
 
+def _read_console_script(codebase_path: str) -> Optional[str]:
+    """Return the first console_scripts entry name from setup.cfg or pyproject.toml."""
+    import configparser
+    root = Path(codebase_path)
+
+    # setup.cfg: [options.entry_points] console_scripts = name = module:func
+    setup_cfg = root / "setup.cfg"
+    if setup_cfg.exists():
+        cfg = configparser.ConfigParser()
+        try:
+            cfg.read(setup_cfg)
+            scripts_raw = cfg.get("options.entry_points", "console_scripts", fallback="")
+            for line in scripts_raw.splitlines():
+                line = line.strip()
+                if "=" in line and not line.startswith("#"):
+                    return line.split("=")[0].strip()
+        except Exception:
+            pass
+
+    # pyproject.toml: [project.scripts] name = "module:func"
+    pyproject = root / "pyproject.toml"
+    if pyproject.exists():
+        try:
+            content = pyproject.read_text(errors="replace")
+            in_scripts = False
+            for line in content.splitlines():
+                stripped = line.strip()
+                if stripped in ("[project.scripts]", "[tool.poetry.scripts]"):
+                    in_scripts = True
+                    continue
+                if in_scripts:
+                    if stripped.startswith("["):
+                        break
+                    if "=" in stripped and not stripped.startswith("#"):
+                        return stripped.split("=")[0].strip()
+        except Exception:
+            pass
+
+    return None
+
+
 def _build_backend_config(analysis: AnalysisResult, codebase_path: str = "") -> Optional[BackendConfig]:
     """Create backend configuration from analysis results."""
     ipc_type = analysis.primary_ipc
@@ -336,14 +381,31 @@ def _build_backend_config(analysis: AnalysisResult, codebase_path: str = "") -> 
 
     # For CLI apps, try to find the entry point command
     if ipc_type == IPCType.CLI:
-        if analysis.entry_points:
-            config.command = f"python {analysis.entry_points[0]}"
+        # First, try to read console_scripts from setup.cfg or pyproject.toml
+        console_script = _read_console_script(codebase_path) if codebase_path else None
+        if console_script:
+            config.command = console_script
+        elif analysis.entry_points:
+            # Prefer canonical entry points; skip packaging/build/platform dirs
+            _skip_dirs = {"extras", "packaging", "build", "dist", "scripts",
+                          "linux", "windows", "macos", "win32"}
+            _canonical = {"__main__.py", "cli.py", "app.py", "main.py"}
+            preferred = [
+                ep for ep in analysis.entry_points
+                if not any(part in _skip_dirs for part in ep.replace("\\", "/").split("/"))
+            ]
+            # Further prefer canonical filenames within the filtered set
+            canonical_eps = [ep for ep in preferred if ep.split("/")[-1] in _canonical]
+            best = (canonical_eps or preferred or analysis.entry_points)[0]
+            abs_entry = str(Path(codebase_path) / best) if codebase_path else best
+            config.command = f"python {abs_entry}"
         else:
             # Fallback: find a Python file that likely has a main script
             found_py = False
             for cap in analysis.capabilities:
                 if cap.source_file and cap.source_file.endswith(".py"):
-                    config.command = f"python {cap.source_file}"
+                    abs_src = str(Path(codebase_path) / cap.source_file) if codebase_path else cap.source_file
+                    config.command = f"python {abs_src}"
                     found_py = True
                     break
             # For non-Python CLI tools (ffmpeg, sox, etc.), use the app name

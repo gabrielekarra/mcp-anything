@@ -1183,3 +1183,130 @@ class TestRustWarp:
         assert syntax_errors == [], "Syntax errors:\n" + "\n".join(syntax_errors)
         server_mod = _import_server(tmp_output, pkg_name)
         assert hasattr(server_mod, "server")
+
+
+# ---------------------------------------------------------------------------
+# Tests — mcp-use TypeScript target
+# ---------------------------------------------------------------------------
+
+async def _run_pipeline_mcp_use(
+    codebase_path: Path,
+    output_dir: Path,
+    *,
+    name: str | None = None,
+) -> GenerationManifest:
+    """Run the full pipeline with --target mcp-use and return the manifest."""
+    options = CLIOptions(
+        codebase_path=codebase_path,
+        output_dir=output_dir,
+        name=name,
+        no_llm=True,
+        no_install=True,
+        target="mcp-use",
+    )
+    console = Console(quiet=True)
+    engine = PipelineEngine(options, console)
+    await engine.run()
+
+    manifest_path = output_dir / "mcp-anything-manifest.json"
+    assert manifest_path.exists(), "Manifest file not created"
+    return GenerationManifest.load(manifest_path)
+
+
+def _assert_mcp_use_structure(output_dir: Path) -> None:
+    """Assert expected TypeScript output files exist."""
+    assert (output_dir / "src" / "server.ts").exists(), "src/server.ts missing"
+    assert (output_dir / "package.json").exists(), "package.json missing"
+    assert (output_dir / "tsconfig.json").exists(), "tsconfig.json missing"
+    assert (output_dir / "mcp.json").exists(), "mcp.json missing"
+    assert (output_dir / "AGENTS.md").exists(), "AGENTS.md missing"
+
+
+class TestMcpUseHttp:
+    """Integration test: mcp-use TypeScript target with HTTP tools (Flask fixture)."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_flask_app, tmp_output):
+        manifest = await _run_pipeline_mcp_use(fake_flask_app, tmp_output)
+
+        assert manifest.completed_phases == [
+            "analyze", "design", "implement", "document", "package"
+        ], f"Phases: {manifest.completed_phases}"
+        assert manifest.errors == [], f"Pipeline errors: {manifest.errors}"
+
+        design = manifest.design
+        assert design is not None
+        assert len(design.tools) >= 2
+
+        tool_names = _get_tool_names(manifest)
+        assert "get_users" in tool_names or "get_items" in tool_names or any(
+            "get" in n for n in tool_names
+        ), f"Expected HTTP GET tools, got: {tool_names}"
+
+        for tool in design.tools:
+            assert tool.impl.strategy == "http_call", (
+                f"Tool {tool.name}: expected http_call, got {tool.impl.strategy}"
+            )
+
+        _assert_mcp_use_structure(tmp_output)
+
+        # server.ts must reference mcp-use and each tool name
+        server_ts = (tmp_output / "src" / "server.ts").read_text()
+        assert "mcp-use/server" in server_ts
+        assert "MCPServer" in server_ts
+        assert "server.tool(" in server_ts
+        assert "await server.listen(3000)" in server_ts
+        for name in tool_names:
+            assert name in server_ts, f"Tool name {name!r} missing from server.ts"
+
+        # package.json must depend on mcp-use
+        import json
+        pkg = json.loads((tmp_output / "package.json").read_text())
+        assert "mcp-use" in pkg["dependencies"]
+
+        # AGENTS.md must mention TypeScript runtime note
+        agents_md = (tmp_output / "AGENTS.md").read_text()
+        assert "npm" in agents_md
+
+    @pytest.mark.asyncio
+    async def test_no_python_files_generated(self, fake_flask_app, tmp_output):
+        await _run_pipeline_mcp_use(fake_flask_app, tmp_output)
+
+        python_files = list(tmp_output.rglob("*.py"))
+        # Only allow conftest/setup files — no generated server Python modules
+        generated_py = [
+            f for f in python_files
+            if f.name not in ("setup.py",) and "mcp_" in str(f)
+        ]
+        assert generated_py == [], (
+            f"mcp-use target should not generate Python server files: {generated_py}"
+        )
+
+
+class TestMcpUseCLI:
+    """Integration test: mcp-use TypeScript target with CLI tools (argparse fixture)."""
+
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self, fake_cli_app, tmp_output):
+        manifest = await _run_pipeline_mcp_use(fake_cli_app, tmp_output)
+
+        assert manifest.completed_phases == [
+            "analyze", "design", "implement", "document", "package"
+        ], f"Phases: {manifest.completed_phases}"
+        assert manifest.errors == [], f"Pipeline errors: {manifest.errors}"
+
+        design = manifest.design
+        assert design is not None
+        assert len(design.tools) >= 1
+
+        for tool in design.tools:
+            assert tool.impl.strategy in ("cli_subcommand", "cli_function"), (
+                f"Tool {tool.name}: expected CLI strategy, got {tool.impl.strategy}"
+            )
+
+        _assert_mcp_use_structure(tmp_output)
+
+        server_ts = (tmp_output / "src" / "server.ts").read_text()
+        assert "execAsync" in server_ts, "CLI tools must use execAsync"
+        assert "BINARY_PATH" in server_ts, "CLI tools must reference BINARY_PATH"
+        assert "await server.listen(3000)" in server_ts

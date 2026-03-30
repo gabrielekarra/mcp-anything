@@ -160,6 +160,7 @@ def _extract_parameters(
             required=required,
             default=str(default) if default is not None else None,
             enum_values=enum_values,
+            location=location,
         ))
 
     # Request body (OpenAPI 3.x)
@@ -191,6 +192,7 @@ def _extract_parameters(
                             description=prop_schema.get("description", ""),
                             required=prop_name in required_fields,
                             default=str(prop_schema["default"]) if "default" in prop_schema else None,
+                            location="body",
                         ))
             elif schema.get("type") == "object" and "properties" in schema:
                 properties = schema["properties"]
@@ -205,6 +207,7 @@ def _extract_parameters(
                         description=prop_schema.get("description", ""),
                         required=prop_name in required_fields,
                         default=str(prop_schema["default"]) if "default" in prop_schema else None,
+                        location="body",
                     ))
             else:
                 # Generic body param
@@ -215,6 +218,7 @@ def _extract_parameters(
                         type="object",
                         description=body_desc,
                         required=request_body.get("required", True),
+                        location="body",
                     ))
 
     return params
@@ -426,6 +430,7 @@ def openapi_to_capabilities(
                     p for p in merged_operation.get("parameters", [])
                     if isinstance(p, dict) and p.get("in") == "body"
                 ]
+                existing_names = {p.name for p in params}
                 for bp in body_params:
                     schema = bp.get("schema", {})
                     if "$ref" in schema:
@@ -433,6 +438,9 @@ def openapi_to_capabilities(
                         if resolved and "properties" in resolved:
                             required_fields = set(resolved.get("required", []))
                             for prop_name, prop_schema in resolved["properties"].items():
+                                if prop_name in existing_names:
+                                    continue
+                                existing_names.add(prop_name)
                                 params.append(ParameterSpec(
                                     name=prop_name,
                                     type=_extract_schema_type(prop_schema, spec),

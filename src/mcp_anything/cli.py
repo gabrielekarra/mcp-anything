@@ -50,6 +50,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="MCP transport mode (default: stdio, use http for remote/enterprise)",
     )
     gen.add_argument(
+        "--target",
+        choices=["fastmcp", "mcp-use"],
+        default="fastmcp",
+        help="Target MCP SDK. 'fastmcp' (default) generates Python/FastMCP. 'mcp-use' generates TypeScript using the mcp-use SDK.",
+    )
+    gen.add_argument(
         "--include",
         action="append",
         default=None,
@@ -118,6 +124,7 @@ def parse_options(args: argparse.Namespace) -> CLIOptions:
         no_install=getattr(args, "no_install", False),
         verbose=getattr(args, "verbose", False),
         transport=getattr(args, "transport", "stdio") or "stdio",
+        target=getattr(args, "target", "fastmcp"),
         include=getattr(args, "include", None),
         exclude=getattr(args, "exclude", None),
         scope_file=getattr(args, "scope_file", None),

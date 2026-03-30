@@ -55,6 +55,12 @@ class Emitter:
         self._emit_agents_md()
         return self.generated_files[start:]
 
+    def emit_agents_only(self) -> list[str]:
+        """Generate only AGENTS.md, without README (used by mcp-use target)."""
+        start = len(self.generated_files)
+        self._emit_agents_md()
+        return self.generated_files[start:]
+
     def emit_packaging(self) -> list[str]:
         """Generate packaging files."""
         start = len(self.generated_files)

@@ -191,7 +191,7 @@ class TestGenerationStatus:
 
         _assign_generation_status(tool, design.backend)
 
-        assert tool.generation_status == "proxy"
+        assert tool.generation_status == "ready"
         assert "HTTP API" in tool.generation_notes
 
     def test_stub_tools_are_marked_stubbed(self):

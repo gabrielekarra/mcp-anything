@@ -14,3 +14,7 @@ venv/
 *.so
 .DS_Store
 mcp-anything-manifest.json
+node_modules/
+package-lock.json
+.mcp.json
+http-mcp-server/

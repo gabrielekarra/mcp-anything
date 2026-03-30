@@ -63,6 +63,7 @@ class ParameterSpec(BaseModel):
     enum_values: Optional[list[str]] = None
     properties: Optional[list["ParameterSpec"]] = None  # nested fields for object types
     original_type: Optional[str] = None  # original language type name (e.g. "Fruit") for resolution
+    location: str = ""  # "query", "path", "body", or "" (unknown)
 
 
 class Capability(BaseModel):

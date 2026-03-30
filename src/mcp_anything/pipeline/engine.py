@@ -15,7 +15,7 @@ from mcp_anything.pipeline.scope import apply_scope, write_scope_file
 ALL_PHASES = ["analyze", "design", "implement", "document", "package"]
 
 
-def _load_phases(names: list[str]) -> list[Phase]:
+def _load_phases(names: list[str], target: str = "fastmcp") -> list[Phase]:
     """Lazily import and instantiate requested phases."""
     phases: list[Phase] = []
     for name in names:
@@ -28,17 +28,27 @@ def _load_phases(names: list[str]) -> list[Phase]:
 
             phases.append(DesignPhase())
         elif name == "implement":
-            from mcp_anything.pipeline.implement import ImplementPhase
+            if target == "mcp-use":
+                from mcp_anything.pipeline.implement_mcp_use import ImplementMcpUsePhase
 
-            phases.append(ImplementPhase())
+                phases.append(ImplementMcpUsePhase())
+            else:
+                from mcp_anything.pipeline.implement import ImplementPhase
+
+                phases.append(ImplementPhase())
         elif name == "document":
             from mcp_anything.pipeline.document import DocumentPhase
 
             phases.append(DocumentPhase())
         elif name == "package":
-            from mcp_anything.pipeline.package import PackagePhase
+            if target == "mcp-use":
+                from mcp_anything.pipeline.package_mcp_use import PackageMcpUsePhase
 
-            phases.append(PackagePhase())
+                phases.append(PackageMcpUsePhase())
+            else:
+                from mcp_anything.pipeline.package import PackagePhase
+
+                phases.append(PackagePhase())
     return phases
 
 
@@ -101,7 +111,7 @@ class PipelineEngine:
         ctx = PipelineContext(self.options, manifest, self.console)
 
         phase_names = self.options.phases or ALL_PHASES
-        phases = _load_phases(phase_names)
+        phases = _load_phases(phase_names, target=getattr(self.options, "target", "fastmcp"))
 
         self.console.print(
             f"[bold green]MCP-Anything[/bold green] generating server for "

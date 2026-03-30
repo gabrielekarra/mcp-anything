@@ -117,6 +117,114 @@ def _has_properties(param) -> bool:
     return bool(getattr(param, "properties", None))
 
 
+def _zod_type(type_str: str) -> str:
+    """Map a type string to a Zod schema expression."""
+    mapping = {
+        "string": "z.string()",
+        "str": "z.string()",
+        "int": "z.number().int()",
+        "integer": "z.number().int()",
+        "float": "z.number()",
+        "number": "z.number()",
+        "bool": "z.boolean()",
+        "boolean": "z.boolean()",
+        "list": "z.array(z.string())",
+        "array": "z.array(z.string())",
+        "dict": "z.record(z.string(), z.unknown())",
+        "object": "z.record(z.string(), z.unknown())",
+        "any": "z.string()",
+        "none": "z.string()",
+        "null": "z.string()",
+        "path": "z.string()",
+        "bytes": "z.string()",
+    }
+    return mapping.get(type_str.lower(), "z.string()")
+
+
+def _zod_field(param) -> str:
+    """Generate a complete Zod field definition for a ParameterSpec.
+
+    Handles nested object types, optional params, and description annotations.
+    """
+    props = getattr(param, "properties", None)
+    if props:
+        inner_parts = []
+        for p in props:
+            t = _zod_type(p.type)
+            if not p.required:
+                t += ".optional()"
+            inner_parts.append(f"{p.name}: {t}")
+        base = "z.object({" + ", ".join(inner_parts) + "})"
+    else:
+        base = _zod_type(getattr(param, "type", "string"))
+
+    if not getattr(param, "required", True):
+        base += ".optional()"
+
+    desc = getattr(param, "description", "")
+    if desc:
+        desc_escaped = desc.replace("\\", "\\\\").replace('"', '\\"').split("\n")[0].strip()[:120]
+        if desc_escaped:
+            base += f'.describe("{desc_escaped}")'
+
+    return base
+
+
+def _ts_string(value: str) -> str:
+    """Wrap a value in a double-quoted TypeScript string literal, escaping as needed."""
+    if not value:
+        return '""'
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').split("\n")[0].strip()
+    return f'"{escaped}"'
+
+
+def _ts_identifier(value: str) -> str:
+    """Convert a name to a safe JavaScript/TypeScript identifier."""
+    s = re.sub(r"[^a-zA-Z0-9_$]", "_", value)
+    s = re.sub(r"_+", "_", s).strip("_")
+    if not s:
+        return "param"
+    if s[0].isdigit():
+        s = f"p_{s}"
+    _JS_RESERVED = {
+        "break", "case", "catch", "class", "const", "continue", "debugger",
+        "default", "delete", "do", "else", "export", "extends", "finally",
+        "for", "function", "if", "import", "in", "instanceof", "let", "new",
+        "null", "return", "static", "super", "switch", "this", "throw", "try",
+        "typeof", "undefined", "var", "void", "while", "with", "yield",
+        "async", "await", "of",
+    }
+    if s in _JS_RESERVED:
+        s = f"{s}_"
+    return s
+
+
+def create_mcp_use_jinja_env() -> Environment:
+    """Create a Jinja2 environment for mcp-use TypeScript template rendering."""
+    templates_dir = Path(__file__).parent / "templates" / "mcp_use"
+    env = Environment(
+        loader=FileSystemLoader(str(templates_dir)),
+        autoescape=select_autoescape([]),
+        keep_trailing_newline=True,
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+
+    # Reuse Python filters that are also useful for TS generation
+    env.filters["snake_case"] = _snake_case
+    env.filters["pascal_case"] = _pascal_case
+    env.filters["kebab_case"] = _kebab_case
+    env.filters["safe_identifier"] = _safe_identifier
+
+    # TypeScript / Zod specific filters
+    env.filters["zod_type"] = _zod_type
+    env.filters["zod_field"] = _zod_field
+    env.filters["ts_string"] = _ts_string
+    env.filters["ts_identifier"] = _ts_identifier
+
+    return env
+
+
 def create_jinja_env() -> Environment:
     """Create a configured Jinja2 environment for code generation."""
     templates_dir = Path(__file__).parent / "templates"

@@ -258,7 +258,7 @@ class TestEmitter:
         emitter.emit_all()
 
         module = (tmp_path / "src" / "mcp_test_app" / "tools" / "api.py").read_text()
-        assert "request_body: dict | None = None" in module
+        assert "request_body" in module
         assert "body=request_body" in module
 
     def test_serve_fallback_preserves_env(self, tmp_path):

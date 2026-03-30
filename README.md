@@ -49,6 +49,24 @@ mcp-my-app  # server runs on http://localhost:8000/sse
 }
 ```
 
+## Targets
+
+By default, mcp-anything generates a **Python / FastMCP** server. Use `--target=mcp-use` to generate a **TypeScript / mcp-use** server instead:
+
+```bash
+mcp-anything generate /path/to/app --target mcp-use
+```
+
+The TypeScript server uses the [mcp-use](https://github.com/mcp-use/mcp-use) SDK and ships with a built-in inspector.
+
+| | `--target fastmcp` (default) | `--target mcp-use` |
+|---|---|---|
+| Language | Python | TypeScript |
+| SDK | FastMCP | mcp-use |
+| Transport | stdio / HTTP | HTTP (port 3000) |
+| Inspector | External | Built-in at /inspector |
+| Install | `pip install -e .` | `npm install && npm run dev` |
+
 ## What's supported
 
 mcp-anything detects and wraps source code across 8 ecosystems — REST frameworks, CLI tools, API specs, and protocol-based services.
