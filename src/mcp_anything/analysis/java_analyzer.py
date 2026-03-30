@@ -223,18 +223,21 @@ _KOTLIN_SPRING_PARAM_RE = re.compile(
 # ---------------------------------------------------------------------------
 
 # Class-level @Path for Kotlin: annotation + 'class ClassName'
+# Use [^\n]*\n to skip whole annotation lines so trailing comments like
+# // note (with parens) don't terminate the match prematurely.
 _KOTLIN_JAXRS_CLASS_PATH_RE = re.compile(
-    r'@Path\s*\(\s*["\']([^"\']*)["\'].*?\)\s+'
-    r'(?:@\w+(?:\s*\([^)]*\))?\s+)*'
+    r'@Path\s*\(\s*["\']([^"\']*)["\'].*?\)\s*\n'
+    r'(?:@\w+[^\n]*\n)*'   # skip entire annotation lines
     r'(?:open\s+)?class\s+(\w+)',
-    re.DOTALL,
 )
 
 # Kotlin method: @GET/@POST/... + optional @Path + 'fun methodName('
+# Broadened to skip ANY intervening annotations (not just @Consumes/@Produces)
+# so patterns like @Timeout(1000) // note (with parens) don't break the match.
 _KOTLIN_JAXRS_METHOD_RE = re.compile(
     r'@(GET|POST|PUT|DELETE|PATCH)\b'
     r'(?:\s+@Path\s*\(\s*["\']([^"\']*)["\'].*?\))?'
-    r'(?:\s+@(?:Consumes|Produces)\s*\([^)]*\))*'
+    r'(?:\s+@\w+(?:\s*\([^)]*\))?)*'   # skip any number of other annotations
     r'\s+'
     r'(?:override\s+)?fun\s+'
     r'(\w+)'  # method name
