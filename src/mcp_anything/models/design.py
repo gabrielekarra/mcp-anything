@@ -98,6 +98,24 @@ class BackendConfig(BaseModel):
     auth: AuthConfig = Field(default_factory=AuthConfig)
 
 
+class ToolGroup(BaseModel):
+    """A group of CRUD operations collapsed into a single entry-point tool."""
+
+    name: str
+    description: str = ""
+    operations: list[str] = Field(default_factory=list)
+    disclosure_level: str = "default"  # "default" or "verbose"
+
+
+class ComposedTool(BaseModel):
+    """A multi-step workflow promoted to a single callable tool."""
+
+    name: str
+    description: str
+    steps: list[str] = Field(default_factory=list)  # ordered tool names
+    trigger_pattern: str = ""  # NL description of when to use this
+
+
 class ServerDesign(BaseModel):
     """Complete design for the generated MCP server."""
 
@@ -114,5 +132,9 @@ class ServerDesign(BaseModel):
     transport: str = "stdio"  # "stdio" or "http"
     http_host: str = "0.0.0.0"
     http_port: int = 8000
-    enable_telemetry: bool = False
+    enable_telemetry: bool = True
     generate_agents_md: bool = True
+    # 2026 stack additions
+    tool_groups: list[ToolGroup] = Field(default_factory=list)
+    composed_tools: list[ComposedTool] = Field(default_factory=list)
+    discovery_endpoint: bool = True

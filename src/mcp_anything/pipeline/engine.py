@@ -13,6 +13,7 @@ from mcp_anything.pipeline.scope import apply_scope, write_scope_file
 
 
 ALL_PHASES = ["analyze", "design", "implement", "document", "package"]
+DOMAIN_PHASES = ["domain_modeling", "tool_design", "emit", "skill_bundle", "validation_harness"]
 
 
 def _load_phases(names: list[str], target: str = "fastmcp") -> list[Phase]:
@@ -27,6 +28,22 @@ def _load_phases(names: list[str], target: str = "fastmcp") -> list[Phase]:
             from mcp_anything.pipeline.design import DesignPhase
 
             phases.append(DesignPhase())
+        elif name == "domain_modeling":
+            from mcp_anything.pipeline.domain_modeling import DomainModelingPhase
+
+            phases.append(DomainModelingPhase())
+        elif name == "tool_design":
+            from mcp_anything.pipeline.tool_design import ToolDesignPhase
+
+            phases.append(ToolDesignPhase())
+        elif name == "skill_bundle":
+            from mcp_anything.pipeline.skill_bundle import SkillBundlePhase
+
+            phases.append(SkillBundlePhase())
+        elif name == "validation_harness":
+            from mcp_anything.pipeline.validation_harness import ValidationHarnessPhase
+
+            phases.append(ValidationHarnessPhase())
         elif name == "implement":
             if target == "mcp-use":
                 from mcp_anything.pipeline.implement_mcp_use import ImplementMcpUsePhase
@@ -36,6 +53,15 @@ def _load_phases(names: list[str], target: str = "fastmcp") -> list[Phase]:
                 from mcp_anything.pipeline.implement import ImplementPhase
 
                 phases.append(ImplementPhase())
+        elif name == "emit":
+            if target == "mcp-use":
+                from mcp_anything.emit.typescript_mcp_use.phase import TypeScriptMcpUseEmitPhase
+
+                phases.append(TypeScriptMcpUseEmitPhase())
+            else:
+                from mcp_anything.emit.python_fastmcp.phase import PythonFastMCPEmitPhase
+
+                phases.append(PythonFastMCPEmitPhase())
         elif name == "document":
             from mcp_anything.pipeline.document import DocumentPhase
 
@@ -59,7 +85,7 @@ class PipelineEngine:
         self.options = options
         self.console = console
 
-    def _init_manifest(self) -> GenerationManifest:
+    def _init_manifest(self, pipeline_mode: str = "legacy") -> GenerationManifest:
         output_dir = self.options.resolved_output_dir()
         manifest_path = output_dir / "mcp-anything-manifest.json"
 
@@ -68,10 +94,70 @@ class PipelineEngine:
             return GenerationManifest.load(manifest_path)
 
         return GenerationManifest(
+            pipeline_mode=pipeline_mode,
             codebase_path=str(self.options.codebase_path.resolve()),
             output_dir=str(output_dir.resolve()),
             server_name=self.options.resolved_name(),
         )
+
+    def _peek_brief_name(self) -> str:
+        """Read server_name from the brief file without full parsing, for display."""
+        brief_file = getattr(self.options, "brief_file", None)
+        if brief_file:
+            try:
+                import yaml
+                raw = yaml.safe_load(Path(brief_file).read_text())
+                name = raw.get("server_name", "")
+                if name:
+                    return name
+            except Exception:
+                pass
+        return self.options.resolved_name()
+
+    async def run_domain(self) -> None:
+        """Run the domain-modeling pipeline (Phases 1-5)."""
+        manifest = self._init_manifest(pipeline_mode="domain")
+        ctx = PipelineContext(self.options, manifest, self.console)
+
+        phase_names = self.options.phases or DOMAIN_PHASES
+        phases = _load_phases(phase_names, target=getattr(self.options, "target", "fastmcp"))
+
+        display_name = self._peek_brief_name()
+        self.console.print(
+            f"[bold green]MCP-Anything[/bold green] building domain server for "
+            f"[cyan]{display_name}[/cyan]"
+        )
+        self.console.print(f"Phases: {', '.join(phase_names)}")
+        self.console.print()
+
+        for phase in phases:
+            if self.options.resume and manifest.phase_completed(phase.name):
+                self.console.print(f"  [dim]Skipping {phase.name} (already completed)[/dim]")
+                continue
+
+            errors = phase.validate_preconditions(ctx)
+            if errors:
+                for e in errors:
+                    self.console.print(f"  [red]Precondition failed:[/red] {e}")
+                return
+
+            self.console.print(f"  [bold]Phase: {phase.name}[/bold] ...")
+            try:
+                await phase.execute(ctx)
+            except SystemExit:
+                return  # review mode or auto-approve pause
+            except Exception as exc:
+                manifest.errors.append(f"{phase.name}: {exc}")
+                ctx.save_manifest()
+                self.console.print(f"  [red]Phase {phase.name} failed:[/red] {exc}")
+                raise
+
+            manifest.mark_phase_completed(phase.name)
+            ctx.save_manifest()
+            self.console.print(f"  [green]✓[/green] {phase.name} complete")
+
+        self.console.print()
+        self.console.print(f"[bold green]Done![/bold green] Output: {ctx.output_dir}")
 
     def _apply_scope_filtering(
         self, manifest: GenerationManifest, ctx: PipelineContext

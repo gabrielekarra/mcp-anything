@@ -1,8 +1,14 @@
 # MCP-Anything
 
 ## What this project does
-Auto-generates MCP servers from any scriptable application's source code.
-One command: `mcp-anything generate <path>` → pip-installable MCP server package.
+LLM-driven pipeline that takes a customer's domain brief (use-cases in natural language)
+and a data source (OpenAPI / gRPC / DB schema / SDK), and produces a fully-implemented,
+optimized MCP server plus skill bundle and validation artifacts.
+
+Two output backends: **Python/FastMCP** and **TypeScript/mcp-use**.
+
+Legacy path: `mcp-anything generate <path>` (codebase scanner, backwards-compatible).
+Domain path: `mcp-anything build --brief <brief.yaml>` (new, recommended).
 
 ## Development
 - Install: `pip install -e ".[dev,llm]"`
@@ -10,24 +16,52 @@ One command: `mcp-anything generate <path>` → pip-installable MCP server packa
 - Run CLI: `mcp-anything --help`
 
 ## Architecture
-- 5-phase pipeline: ANALYZE → DESIGN → IMPLEMENT → DOCUMENT → PACKAGE
-- Static detectors + optional LLM analysis (Claude API)
-- Jinja2 templates for code generation (`src/mcp_anything/codegen/templates/`)
-- Generated servers use `mcp` SDK's FastMCP
-- Pipeline state saved as JSON manifest for resume support
-- Emitter prefixes package names with `mcp_` (e.g. `my-app` → `mcp_my_app`)
+
+### Domain Pipeline (new, primary)
+5 phases: DOMAIN_MODELING → TOOL_DESIGN → EMIT → SKILL_BUNDLE → VALIDATION_HARNESS
+- Phase 1 (`domain_modeling.py`): LLM reads brief + data source → `domain_model.json`
+- Phase 2 (`tool_design.py`): LLM shapes tools per 2026 rules → `tool_spec.yaml`
+- Phase 3 (`emit/python_fastmcp/` or `emit/typescript_mcp_use/`): code generation
+- Phase 4 (`skill_bundle.py`): LLM generates `SKILL.md` + `quick_queries.json`
+- Phase 5 (`validation_harness.py`): LLM generates `eval_cases.json`, optional live eval
+- Output contract: `CONTRACT.md` — 29 testable items (C-01..C-29) both emitters must satisfy
+- Conformance suite: `src/mcp_anything/conformance/` with parity assertion and CI reporter
+
+### Legacy Pipeline (preserved, unchanged)
+5 phases: ANALYZE → DESIGN → IMPLEMENT → DOCUMENT → PACKAGE
+- Static detectors + optional LLM analysis
+- Jinja2 templates in `src/mcp_anything/codegen/templates/`
+- `mcp-anything generate <path>` — unchanged
+
+### 2026 Stack Defaults (wired into domain pipeline)
+- Group CRUD: ≥3 CRUD ops on same resource → single `manage_X(operation=...)` tool
+- Composed tools: multi-step workflows promoted to single callable
+- Progressive disclosure: `disclosure_level` on every tool, verbose-only tools hidden by default
+- Compact responses: every tool has `verbose` flag (C-10)
+- Discovery endpoint: `GET /.well-known/mcp` (C-01..C-03)
+- Telemetry: anonymized per-call logging, `MCP_TELEMETRY_ENDPOINT` env var (C-19..C-20)
+- Docker: `Dockerfile` in every generated server (C-17)
+- SKILL.md: required sections Overview, Tools, Usage Patterns, Gotchas, Recipes, Anti-patterns (C-22)
 
 ## Key Files
-- `src/mcp_anything/cli.py` — CLI entry point
-- `src/mcp_anything/pipeline/engine.py` — phase orchestration
+- `src/mcp_anything/cli.py` — CLI entry point (subcommands: model, build, validate, generate, serve)
+- `src/mcp_anything/pipeline/engine.py` — phase orchestration; ALL_PHASES (legacy) + DOMAIN_PHASES
+- `src/mcp_anything/pipeline/domain_modeling.py` — Phase 1: domain brief → DomainModel
+- `src/mcp_anything/pipeline/tool_design.py` — Phase 2: DomainModel → ServerDesign (2026 rules)
+- `src/mcp_anything/pipeline/llm_client.py` — shared LLM call utility with JSON retry
+- `src/mcp_anything/emit/python_fastmcp/phase.py` — Phase 3 (Python): ServerDesign → FastMCP server
+- `src/mcp_anything/emit/typescript_mcp_use/phase.py` — Phase 3 (TS): ServerDesign → mcp-use server
+- `src/mcp_anything/emit/base.py` — EmitPhase ABC + structural CONTRACT.md checker
+- `src/mcp_anything/pipeline/skill_bundle.py` — Phase 4: SKILL.md + quick_queries.json
+- `src/mcp_anything/pipeline/validation_harness.py` — Phase 5: eval_cases + conformance_report
+- `src/mcp_anything/conformance/` — EvalRunner, ConformanceParity, ConformanceReporter
+- `src/mcp_anything/models/domain.py` — DomainBrief, DomainModel, UseCase, GlossaryTerm
+- `src/mcp_anything/models/validation.py` — EvalCase, EvalResult, ConformanceReport
+- `src/mcp_anything/models/design.py` — ServerDesign + ToolGroup, ComposedTool (extended)
+- `src/mcp_anything/models/manifest.py` — GenerationManifest v0.2.0 (dual pipeline_mode)
+- `CONTRACT.md` — 29 testable output contract items for both emitters
 - `src/mcp_anything/pipeline/scope.py` — scope filtering (--include/--exclude/--review/--scope-file)
-- `src/mcp_anything/pipeline/analyze.py` — phase 1: detection + AST analysis
-- `src/mcp_anything/pipeline/design.py` — phase 2: capability → tool mapping
-- `src/mcp_anything/pipeline/implement.py` — phase 3: code generation
-- `src/mcp_anything/pipeline/document.py` — phase 4: docs generation
-- `src/mcp_anything/pipeline/package.py` — phase 5: pyproject.toml + install
-- `src/mcp_anything/codegen/emitter.py` — Jinja2 template rendering
-- `src/mcp_anything/models/` — Pydantic models (analysis, design, manifest)
+- `src/mcp_anything/codegen/emitter.py` — legacy Jinja2 template rendering
 - `src/mcp_anything/url_fetcher.py` — URL spec fetching and type detection
 
 ## Detectors (17 total)

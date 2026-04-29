@@ -7,6 +7,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 from rich.console import Console
 
@@ -93,6 +94,55 @@ def build_parser() -> argparse.ArgumentParser:
     des.add_argument("--no-llm", action="store_true")
     des.add_argument("-v", "--verbose", action="store_true")
 
+    # model — Phase 1 only: domain brief → domain_model.json
+    mod = subparsers.add_parser(
+        "model",
+        help="[domain] Phase 1: collect domain brief + data source → domain_model.json",
+    )
+    mod.add_argument("--brief", dest="brief_file", type=Path, help="Path to domain brief YAML/JSON")
+    mod.add_argument("--data-source", dest="data_source", type=Path, help="Path to OpenAPI spec, .proto, DDL, or SDK")
+    mod.add_argument("--name", help="Server name")
+    mod.add_argument("-o", "--output-dir", type=Path)
+    mod.add_argument("--review", action="store_true", help="Pause for domain model sign-off")
+    mod.add_argument("--resume", action="store_true", help="Continue from saved domain_model.json")
+    mod.add_argument("--auto-approve", dest="auto_approve", action="store_true", help="Skip sign-off gate")
+    mod.add_argument("--no-llm", action="store_true")
+    mod.add_argument("-v", "--verbose", action="store_true")
+
+    # build — full domain pipeline: Phases 1-5
+    bld = subparsers.add_parser(
+        "build",
+        help="[domain] Full 5-phase domain pipeline: brief → domain model → tool design → server",
+    )
+    bld.add_argument("--brief", dest="brief_file", type=Path, required=True, help="Path to domain brief YAML/JSON")
+    bld.add_argument("--data-source", dest="data_source", type=Path, help="Path to API spec, .proto, DDL, or SDK")
+    bld.add_argument("--name", help="Server name (default: from brief)")
+    bld.add_argument("-o", "--output-dir", type=Path)
+    bld.add_argument(
+        "--target",
+        choices=["fastmcp", "mcp-use"],
+        default="fastmcp",
+        help="Output backend: fastmcp (Python) or mcp-use (TypeScript)",
+    )
+    bld.add_argument("--resume", action="store_true")
+    bld.add_argument("--auto-approve", dest="auto_approve", action="store_true")
+    bld.add_argument("--run-eval", dest="run_eval", action="store_true", help="Run live eval after generation")
+    bld.add_argument("--eval-threshold", dest="eval_threshold", type=float, default=0.80)
+    bld.add_argument("--ci", action="store_true", help="Hard-fail on coverage below threshold or parity divergence")
+    bld.add_argument("--no-llm", action="store_true")
+    bld.add_argument("-v", "--verbose", action="store_true")
+
+    # validate — run conformance checks on an existing generated server
+    val = subparsers.add_parser(
+        "validate",
+        help="[domain] Run CONTRACT.md conformance checks on an existing generated server",
+    )
+    val.add_argument("output_dir", type=Path, help="Path to generated server directory")
+    val.add_argument("--run-eval", dest="run_eval", action="store_true", help="Run live eval (requires running server)")
+    val.add_argument("--eval-threshold", dest="eval_threshold", type=float, default=0.80)
+    val.add_argument("--ci", action="store_true")
+    val.add_argument("-v", "--verbose", action="store_true")
+
     # status
     sta = subparsers.add_parser("status", help="Show manifest state for an output directory")
     sta.add_argument("output_dir", type=Path)
@@ -132,6 +182,106 @@ def parse_options(args: argparse.Namespace) -> CLIOptions:
     )
 
 
+def _run_domain_command(
+    args: argparse.Namespace,
+    console: Console,
+    phases: Optional[list[str]],
+) -> None:
+    """Handle 'model' and 'build' subcommands (domain pipeline)."""
+    brief_file = getattr(args, "brief_file", None)
+    data_source = getattr(args, "data_source", None)
+    name = getattr(args, "name", None)
+
+    # Derive server name from brief file stem if not provided
+    if not name and brief_file:
+        name = Path(brief_file).stem.replace("_", "-").replace(" ", "-")
+    if not name:
+        name = "mcp-server"
+
+    # Use a synthetic codebase_path (domain pipeline doesn't need a real codebase)
+    codebase_path = data_source or Path(".")
+
+    output_dir = getattr(args, "output_dir", None) or Path(f"./mcp-{name}-server")
+
+    options = CLIOptions(
+        codebase_path=Path(codebase_path),
+        output_dir=Path(output_dir),
+        name=name,
+        phases=phases,
+        resume=getattr(args, "resume", False),
+        no_llm=getattr(args, "no_llm", False),
+        verbose=getattr(args, "verbose", False),
+        target=getattr(args, "target", "fastmcp"),
+        review=getattr(args, "review", False),
+        brief_file=Path(brief_file) if brief_file else None,
+        auto_approve=getattr(args, "auto_approve", False),
+        run_eval=getattr(args, "run_eval", False),
+        eval_threshold=getattr(args, "eval_threshold", 0.80),
+        ci=getattr(args, "ci", False),
+    )
+
+    from mcp_anything.pipeline.engine import PipelineEngine
+
+    engine = PipelineEngine(options, console)
+    asyncio.run(engine.run_domain())
+
+
+def _run_validate_command(args: argparse.Namespace, console: Console) -> None:
+    """Handle 'validate' subcommand — run CONTRACT checks on an existing server."""
+    output_dir = Path(args.output_dir)
+    if not output_dir.exists():
+        console.print(f"[red]Error:[/red] Output directory not found: {output_dir}")
+        sys.exit(1)
+
+    manifest_path = output_dir / "mcp-anything-manifest.json"
+    if not manifest_path.exists():
+        console.print(f"[red]Error:[/red] No manifest found in {output_dir}")
+        sys.exit(1)
+
+    from mcp_anything.models.manifest import GenerationManifest
+    from mcp_anything.models.design import ServerDesign
+    from mcp_anything.emit.base import EmitPhase
+    from mcp_anything.conformance.reporter import ConformanceReporter
+    from mcp_anything.models.validation import ConformanceReport
+
+    manifest = GenerationManifest.load(manifest_path)
+    design = (
+        ServerDesign.model_validate(manifest.tool_spec)
+        if manifest.tool_spec
+        else manifest.design
+    )
+
+    if not design:
+        console.print("[red]Error:[/red] No tool spec or design found in manifest.")
+        sys.exit(1)
+
+    # Structural contract checks (no running server needed)
+    from mcp_anything.emit.base import EmitPhase as _EmitPhase
+
+    class _TmpPhase(_EmitPhase):
+        name = "_validate"
+        backend_target = "fastmcp"
+        def execute(self, ctx): pass
+
+    phase = _TmpPhase()
+    checks = phase.validate_contract(design, output_dir)
+
+    report = ConformanceReport(
+        server_name=design.server_name,
+        backend_target=manifest.extra_data.get("backend_target", "fastmcp") if manifest.extra_data else "fastmcp",
+        contract_checks=checks,
+        threshold=getattr(args, "eval_threshold", 0.80),
+    )
+
+    output = ConformanceReporter.to_ci_output(report)
+    console.print(output)
+
+    if getattr(args, "ci", False):
+        failed = [c for c in checks if not c.passed]
+        if failed:
+            sys.exit(1)
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
@@ -145,6 +295,18 @@ def main() -> None:
         from mcp_anything.pipeline.engine import show_status
 
         show_status(args.output_dir, console)
+        return
+
+    if args.command == "model":
+        _run_domain_command(args, console, phases=["domain_modeling"])
+        return
+
+    if args.command == "build":
+        _run_domain_command(args, console, phases=None)  # all DOMAIN_PHASES
+        return
+
+    if args.command == "validate":
+        _run_validate_command(args, console)
         return
 
     if args.command == "serve":

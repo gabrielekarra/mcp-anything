@@ -1,3 +1,52 @@
+# v0.2.0 — Domain pipeline
+
+The headline feature of this release is `mcp-anything build --brief` — a brief-driven pipeline that takes a plain-language description of what agents should be able to do and produces a production-ready MCP server automatically.
+
+## What's new
+
+### `build` command — brief-driven generation
+
+Write a short YAML file describing your domain, use cases, and data source. The LLM pipeline does the rest:
+
+```bash
+mcp-anything build --brief my-api.yaml -o ./my-mcp-server
+```
+
+Five LLM phases run end-to-end:
+1. **Domain modeling** — extracts entities, access patterns, use cases, and glossary from your brief + data source
+2. **Tool design** — groups related operations, writes agent-optimised descriptions, applies 2026 MCP design rules
+3. **Emit** — generates valid Python (FastMCP) or TypeScript (mcp-use) with all tools wired up
+4. **Skill bundle** — generates `SKILL.md` (agent guide with recipes, gotchas, anti-patterns) and `quick_queries.json`
+5. **Validation harness** — generates `eval_cases.json` and a `conformance_report.json` against 29 contract items
+
+### 2026 tool design rules
+
+The tool design phase applies a set of rules automatically:
+- **Group CRUD**: ≥3 operations on the same resource → single `manage_X(operation=...)` tool
+- **Compact + verbose**: every tool has a `verbose` flag; compact by default
+- **Discovery endpoint**: every server exposes `GET /.well-known/mcp`
+- **Telemetry**: anonymised per-call logging via `MCP_TELEMETRY_ENDPOINT`
+- **Dockerfile**: every server ships with a container-ready Dockerfile
+
+### Validated against real APIs
+
+- **Stripe**: 13 grouped tools covering the full payment lifecycle — 10+ capabilities absent from the official 15-tool Stripe agent toolkit
+- **GitHub**: 22 grouped tools covering 100% of the in-scope API surface — matching the official 51-tool server at 57% fewer tools
+
+### 27 static detectors (generate mode)
+
+Added Kotlin Spring, Kotlin JAX-RS, Spring MVC, TypeScript Express, Python Click, Rust Warp, Go Echo, Go Chi, Go gorilla/mux, Go net/http, Socket/XML-RPC, and Rails explicit route syntax.
+
+### Conformance suite
+
+`CONTRACT.md` defines 29 testable output contract items (C-01..C-29). Every generated server is checked automatically; results appear in `conformance_report.json`.
+
+## Installation
+
+```bash
+pip install -U mcp-anything
+```
+
 # v0.1.2 — Founder trial hardening
 
 This release tightens the path from `mcp-anything generate ...` to a working MCP server for real production codebases, with a specific focus on HTTP onboarding and frameworks the upcoming founder trial depends on.

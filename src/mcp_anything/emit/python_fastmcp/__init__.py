@@ -1,0 +1,1 @@
+"""Python/FastMCP code emitter."""

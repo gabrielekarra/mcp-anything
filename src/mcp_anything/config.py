@@ -25,7 +25,14 @@ class CLIOptions(BaseModel):
     include: Optional[list[str]] = None  # glob patterns to include capabilities
     exclude: Optional[list[str]] = None  # glob patterns to exclude capabilities
     scope_file: Optional[Path] = None  # path to scope.yaml for capability curation
-    review: bool = False  # pause after ANALYZE to write scope.yaml for editing
+    review: bool = False  # pause after ANALYZE/domain_modeling for customer sign-off
+    # Domain pipeline options
+    brief_file: Optional[Path] = None     # path to domain brief YAML
+    domain_brief: Optional[dict] = None   # in-memory brief (from wizard)
+    auto_approve: bool = False            # skip domain model sign-off gate
+    run_eval: bool = False                # run live eval after validation_harness phase
+    eval_threshold: float = 0.80          # minimum coverage ratio to pass
+    ci: bool = False                      # hard-fail on coverage below threshold
 
     def resolved_name(self) -> str:
         """Server name derived from codebase directory or override."""

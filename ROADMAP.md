@@ -1,129 +1,67 @@
 # Roadmap
 
-Current version: **0.1.3**
+Current version: **0.2.0**
+
+---
 
 ## Completed
 
-### Core Pipeline
-- [x] 5-phase pipeline: ANALYZE → DESIGN → IMPLEMENT → DOCUMENT → PACKAGE
-- [x] JSON manifest for pipeline state and resume support
-- [x] Post-generation AST validation of all generated Python
-- [x] Auto-install target project and generated server dependencies
-- [x] MCP config (`mcp.json`) auto-generation for Claude Code
+### v0.2.0 — Domain pipeline
 
-### Python Analysis
-- [x] AST-based function/class/parameter extraction
-- [x] Click decorator parsing (`@click.option`, `@click.argument`, `click.Choice`)
-- [x] Typer parameter extraction (`typer.Option`, `typer.Argument`)
-- [x] Argparse subcommand and argument detection
-- [x] Entry point detection (`__main__.py`, `if __name__ == '__main__':`)
-- [x] Smart filtering (skip tests, private methods, factories, `sys.exit()` callers)
-- [x] Docstring parsing (Google, NumPy, Sphinx styles)
+- [x] **`mcp-anything build --brief`** — brief-driven generation from a YAML domain description + any data source
+- [x] **Phase 1: Domain modeling** — LLM extracts entities, use cases, access patterns, glossary from brief + OpenAPI/gRPC/GraphQL
+- [x] **Phase 2: Tool design** — LLM applies 2026 MCP rules: group CRUD, lifecycle operations, agent-optimised descriptions, verbose flag, composed tools
+- [x] **Phase 3: Emit (Python/FastMCP)** — inline code generation, AST validation, all tools registered, Dockerfile, pyproject.toml
+- [x] **Phase 4: Skill bundle** — LLM generates `SKILL.md` (agent guide with recipes, gotchas, anti-patterns) and `quick_queries.json`
+- [x] **Phase 5: Validation harness** — LLM generates `eval_cases.json`, conformance report against 29 CONTRACT.md items
+- [x] **CONTRACT.md** — 29 testable output contract items (C-01..C-29) covering tools, auth, transport, telemetry, packaging, SKILL.md
+- [x] **Conformance suite** — `ConformanceParity`, `EvalRunner`, `ConformanceReporter` in `src/mcp_anything/conformance/`
+- [x] **Discovery endpoint** — every generated server exposes `GET /.well-known/mcp`
+- [x] **Telemetry** — anonymised per-call logging via `MCP_TELEMETRY_ENDPOINT`, never logs parameter values
+- [x] **27 static detectors** — added Kotlin Spring/JAX-RS, Spring MVC, TypeScript Express, Python Click, Rust Warp, Go Echo/Chi/gorilla/mux/net-http, Socket/XML-RPC, Rails explicit route syntax
+- [x] **Scope filtering** — `--include`/`--exclude` glob patterns, `--review` mode, `--scope-file` for curated builds
+- [x] **Protocol backends** — real WebSocket (JSON-RPC), gRPC (grpcio-tools), Socket/XML-RPC with retry and error handling
+- [x] **Full framework integration tests** — 484 tests covering all 27 source types, functional tests, e2e HTTP/CLI/WebSocket/gRPC
 
-### IPC Detection (17 detectors)
-- [x] CLI (argparse, click, typer, fire, getopt)
-- [x] Socket (TCP/UDP, xmlrpc, ZeroMQ)
-- [x] Python API (ctypes, cffi, pybind11)
-- [x] Protocol (WebSocket, gRPC, D-Bus, MQTT)
-- [x] File I/O (JSON, YAML, CSV, SQLite)
-- [x] Flask/FastAPI (route decorators, APIRouter, Blueprint)
-- [x] Spring Boot (Java annotations, REST controllers)
-- [x] OpenAPI/Swagger (spec file ingestion)
-- [x] Express.js (route definitions, Router mounts)
-- [x] Django REST Framework (ViewSets, APIViews)
-- [x] Go web (Gin, Echo, Chi, net/http, gorilla/mux)
-- [x] Ruby on Rails (controllers, routes.rb)
-- [x] Rust web (Actix, Axum, Rocket, Warp)
-- [x] GraphQL (SDL schemas, Graphene, Strawberry, Apollo)
-- [x] gRPC/Protobuf (.proto service definitions)
-- [x] JAX-RS/Quarkus (Java REST annotations)
-- [x] Micronaut (controller annotations)
+### v0.1.x — Foundation
 
-### HTTP Framework Support
-- [x] **FastAPI** — route extraction, `Query()`/`Path()`/`Body()` params, `Depends()` filtering, APIRouter prefixes, Pydantic model detection
-- [x] **Flask** — `@app.route()` with `methods=`, `<type:param>` path params, Blueprint support
-- [x] **Spring Boot** — `@RestController`, `@GetMapping`/`@PostMapping`/etc., `@RequestParam`/`@PathVariable`/`@RequestBody`, `application.properties` port extraction
-
-### OpenAPI/Swagger
-- [x] OpenAPI 3.x and Swagger 2.x parsing
-- [x] `$ref` resolution for schemas and parameters
-- [x] Request body property extraction from referenced schemas
-- [x] Enum values, defaults, and type mapping
-- [x] Server/host/basePath extraction
-- [x] Recursive spec file discovery
-- [x] Works with spec-only directories (no source code needed)
-
-### Code Generation
-- [x] 5 implementation strategies: `cli_subcommand`, `cli_function`, `python_call`, `http_call`, `stub`
-- [x] Async HTTP backend with `httpx` for REST API proxying
-- [x] CLI backend with subprocess execution
-- [x] Auto-generated `run_<app>` tool for single-purpose CLI apps
-- [x] Resource implementations (status, commands, config)
-- [x] `--help` parser for non-Python CLIs
-
-### LLM Enhancement (Optional)
-- [x] Claude API analysis for capability discovery
-- [x] LLM-enhanced tool descriptions
-- [x] LLM-assisted tool grouping
-
-### Authentication & Reliability (v0.2.0)
-- [x] **HTTP authentication support** — API keys (header/query), Bearer tokens, Basic auth, OAuth2 client credentials
-- [x] **Environment variable configuration** — secrets via env vars (`<APP>_TOKEN`, `<APP>_API_KEY`, `<APP>_USERNAME`/`<APP>_PASSWORD`), never hardcoded
-- [x] **Error handling improvements** — retry with exponential backoff on 429/5xx, configurable timeout (`<APP>_TIMEOUT`), structured `BackendError` with status code/method/path/response
-- [x] **Base URL configuration** — configurable via `<APP>_BASE_URL` env var, auto-extracted from OpenAPI servers/host
-
-### More Languages & Frameworks (v0.3.0)
-- [x] **Express.js / Node.js** — route extraction from `app.get()`, `router.post()`, path params (`:id`), `req.params`/`req.query`/`req.body` extraction, cross-file router mount prefix resolution
-- [x] **Go Gin / Echo / Chi / net-http** — route extraction, route groups, path params, query/body parameter detection, gorilla/mux support
-- [x] **Django REST Framework** — ViewSets (list/create/retrieve/update/destroy), `@action` custom actions, serializer field extraction, `urls.py` pattern parsing
-- [x] **Ruby on Rails** — `routes.rb` parsing (`resources`, `namespace`, `only:` constraints, explicit routes), controller action extraction, strong parameters
-- [x] **Rust Actix/Axum** — Actix attribute macros (`#[get]`, `#[post]`), Axum `.route()` chaining, struct field extraction for `Query`/`Json` params
-
-### Smarter Analysis (v0.4.0)
-- [x] **Request/response schema extraction** — infer JSON body shapes from Pydantic models, Java POJOs, TypeScript interfaces
-- [x] **Cross-file dependency resolution** — follow imports to find related types and models (Python, Java, TypeScript)
-- [x] **GraphQL support** — SDL schema parsing, query/mutation/subscription extraction with argument types
-- [x] **gRPC/protobuf support** — `.proto` file parsing, service/method extraction, message field mapping, streaming detection
-- [x] **WebSocket endpoint support** — FastAPI WebSocket, Django Channels, Socket.IO, ws library detection
-
-### Enterprise & Agentic Engineering (v0.5.0)
-- [x] **Streamable HTTP transport** — `--transport http` flag to generate servers with SSE/streamable HTTP instead of stdio, configurable host/port via env vars
-- [x] **MCP Prompts generation** — auto-generate server-delivered prompts (skills) for usage guidance and debugging from analysis results
-- [x] **MCP Resources as dynamic docs** — tool index and category documentation served as always-up-to-date MCP resources
-- [x] **AGENTS.md generation** — full tool index with parameters, resources, prompts, and MCP config for coding agent discoverability
-- [x] **OpenTelemetry integration** — TracerProvider initialization + `_trace` decorator wraps each tool handler with `start_as_current_span`
-- [x] **Docker packaging** — auto-generated `Dockerfile` for HTTP transport (template-only, no build validation)
-- [x] **`mcp-anything serve`** — run generated servers directly without installing, with transport override support
-
-### Bug Fixes & Quality (v0.1.1)
-- [x] **Package structure verification** — `_verify_structure` uses correct `mcp_` prefix
-- [x] **Express Router mount prefix** — cross-file prefix resolution for router-mounted routes
-- [x] **OpenTelemetry instrumentation** — `_tracer` now wraps tool handlers with spans (was dead code)
-- [x] **Integration test suite** — 20 end-to-end tests covering all 12+ source types, transport modes, resume, and manifest integrity
-
-### URL & Spec Fetching
-- [x] **URL-based generation** — `mcp-anything generate https://api.example.com/openapi.json` with auto-detection of OpenAPI/Swagger/GraphQL/Protobuf specs, Swagger UI/ReDoc URL resolution, and name derivation
-
-### More Languages & Frameworks (v0.3.1)
-- [x] **JAX-RS / Quarkus** — `@Path`, `@GET`/`@POST`/etc. annotations, `@QueryParam`/`@PathParam`/`@BeanParam` extraction
-- [x] **Micronaut** — `@Controller`, `@Get`/`@Post`/etc., `@QueryValue`/`@PathVariable`/`@Body` parameter detection
+- [x] 5-phase legacy pipeline: ANALYZE → DESIGN → IMPLEMENT → DOCUMENT → PACKAGE
+- [x] JSON manifest with resume support (`--resume`)
+- [x] 6 backend strategies: `cli_subcommand`, `cli_function`, `python_call`, `http_call`, `protocol_call`, `stub`
+- [x] HTTP authentication: API key, Bearer token, Basic auth, OAuth2 client credentials
+- [x] HTTP transport: `--transport http` with SSE, configurable host/port, Docker packaging
+- [x] TypeScript / mcp-use target: `--target mcp-use`
+- [x] URL-based generation: `mcp-anything generate https://api.example.com/openapi.json`
+- [x] MCP Prompts, Resources, AGENTS.md generation
+- [x] OpenTelemetry tracing integration
+- [x] `mcp-anything serve` command
+- [x] AST validation of all generated Python
 
 ---
 
 ## Planned
 
-### v0.6.0 — Quality & Ecosystem
+### v0.3.0 — TypeScript emit for domain pipeline
+
+- [ ] **`--target mcp-use` support for `build`** — TypeScript/mcp-use emit phase in the domain pipeline (currently Python/FastMCP only)
+- [ ] **Emit parity tests** — conformance suite verifies both emitters produce equivalent tool signatures
+
+### v0.4.0 — Multi-source and composition
+
+- [ ] **Multi-service composition** — single MCP server proxying to multiple backends, tool namespacing per service
+- [ ] **Config file** — `.mcp-anything.yaml` for persistent project-level settings (brief path, target, scope file, output dir)
+
+### v0.5.0 — Ecosystem
 
 - [ ] **Plugin system** — custom detectors and analyzers as pip-installable plugins
-- [ ] **Multi-service composition** — generate a single MCP server that proxies to multiple backend services
-- [ ] **Config file support** — `.mcp-anything.yaml` for project-specific settings
+- [ ] **GitHub Action** — auto-regenerate on source changes in CI/CD
+- [ ] **VS Code extension** — right-click any project to generate an MCP server
 
 ### Future
 
-- [ ] **npm/cargo/go package support** — generate MCP servers in other languages
-- [ ] **MCP server marketplace** — publish generated servers to a registry
-- [ ] **VS Code extension** — right-click a project to generate an MCP server
-- [ ] **CI/CD integration** — GitHub Action to auto-regenerate on source changes
+- [ ] **MCP server registry** — publish generated servers for discovery and reuse
+- [ ] **Live eval runner** — run `eval_cases.json` against a live server and report pass rate
+- [ ] **npm / cargo / go package support** — generated servers in languages other than Python/TypeScript
 
 ---
 
@@ -131,10 +69,18 @@ Current version: **0.1.3**
 
 Real-world projects used for end-to-end validation:
 
-| Project | Type | Tools Generated |
-|---------|------|-----------------|
-| [httpstat](https://github.com/reorx/httpstat) | Python CLI (argparse) | 2 tools (run_httpstat, print_help) |
-| [gs-rest-service](https://github.com/spring-guides/gs-rest-service) | Spring Boot (Java) | 1 tool (get_greeting) |
-| [full-stack-fastapi-template](https://github.com/fastapi/full-stack-fastapi-template) | FastAPI (Python) | 49 tools (23 HTTP routes + utilities) |
-| [Swagger Petstore](https://petstore3.swagger.io/) | OpenAPI 3.x spec | 19 tools |
-| [RealWorld Conduit](https://github.com/gothinkster/realworld) | OpenAPI 3.x spec (YAML) | 19 tools |
+| Project | Type | Tools |
+|---|---|---|
+| [Stripe OpenAPI spec](https://github.com/stripe/openapi) | OpenAPI 3.x (domain pipeline) | 13 grouped tools, full payment lifecycle |
+| [github/rest-api-description](https://github.com/github/rest-api-description) | OpenAPI 3.x (domain pipeline) | 22 grouped tools, 100% in-scope coverage |
+| [tokio-rs/axum examples](https://github.com/tokio-rs/axum) | Rust Axum | 36 tools |
+| [SergioBenitez/Rocket examples](https://github.com/SergioBenitez/Rocket) | Rust Rocket | 44 tools |
+| [gorilla/mux](https://github.com/gorilla/mux) | Go gorilla/mux | 33 tools |
+| [labstack/echo](https://github.com/labstack/echo) | Go Echo | 22 tools |
+| [go-chi/chi](https://github.com/go-chi/chi) | Go Chi | 15 tools |
+| [rails/rails activestorage](https://github.com/rails/rails) | Ruby on Rails | 9 tools |
+| [quarkusio/rest-json-quickstart](https://github.com/quarkusio/quarkus-quickstarts) | JAX-RS / Quarkus | 4 tools |
+| [micronaut-core benchmarks](https://github.com/micronaut-projects/micronaut-core) | Micronaut | 2 tools |
+| [fastapi/full-stack-fastapi-template](https://github.com/fastapi/full-stack-fastapi-template) | FastAPI | 49 tools |
+| [spring-guides/gs-rest-service](https://github.com/spring-guides/gs-rest-service) | Spring Boot | 1 tool |
+| [Swagger Petstore](https://petstore3.swagger.io/) | OpenAPI 3.x | 19 tools |
