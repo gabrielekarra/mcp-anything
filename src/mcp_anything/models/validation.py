@@ -39,6 +39,7 @@ class ConformanceReport(BaseModel):
     coverage_ratio: float = 0.0
     threshold: float = 0.80
     passed: bool = False
+    eval_run: bool = False  # True only when --run-eval was requested
     contract_checks: list[ContractCheckResult] = Field(default_factory=list)
 
     def compute_coverage(self) -> None:

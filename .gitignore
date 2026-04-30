@@ -18,3 +18,4 @@ node_modules/
 package-lock.json
 .mcp.json
 http-mcp-server/
+tests/fixtures/realworld_rust_app/target/

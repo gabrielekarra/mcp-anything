@@ -131,6 +131,98 @@ def test_parse_tool_spec_discovery_and_telemetry():
     assert design.enable_telemetry is True
 
 
+def test_fallback_design_derives_http_tools_from_openapi(tmp_path):
+    """--no-llm fallback should walk OpenAPI paths and emit real http_call tools, not stubs."""
+    from mcp_anything.models.domain import DataSource, DomainModel, UseCase
+
+    domain_model = DomainModel(
+        server_name="petstore",
+        domain_description="Petstore",
+        use_cases=[UseCase(id="uc-01", description="List pets", actor="agent")],
+        data_sources=[DataSource(
+            kind="openapi",
+            path="<unused>",
+            parsed_raw={
+                "openapi": "3.0.0",
+                "servers": [{"url": "https://api.example.com/v1"}],
+                "paths": {
+                    "/pets": {
+                        "get": {"operationId": "listPets", "summary": "List all pets"},
+                        "post": {"operationId": "createPet", "summary": "Create a pet"},
+                    },
+                    "/pets/{petId}": {
+                        "get": {
+                            "operationId": "getPetById",
+                            "parameters": [{"name": "petId", "in": "path", "required": True,
+                                            "schema": {"type": "string"}}],
+                        }
+                    },
+                },
+            },
+        )],
+        approved=True,
+    )
+    opts = CLIOptions(codebase_path=tmp_path, output_dir=tmp_path / "out", name="petstore", no_llm=True)
+    manifest = GenerationManifest(
+        pipeline_mode="domain", codebase_path=str(tmp_path), output_dir=str(tmp_path / "out"),
+        server_name="petstore", domain_model=domain_model.model_dump(),
+    )
+    ctx = PipelineContext(opts, manifest, Console(quiet=True))
+
+    asyncio.run(ToolDesignPhase().execute(ctx))
+
+    design = ServerDesign.model_validate(ctx.manifest.tool_spec)
+    names = {t.name for t in design.tools}
+    assert names == {"listpets", "createpet", "getpetbyid"}
+    # Real http_call strategy, no stubs:
+    for t in design.tools:
+        assert t.impl.strategy == "http_call", f"{t.name} should be http_call, got {t.impl.strategy}"
+        assert t.impl.http_method
+        assert t.impl.http_path
+    assert design.backend_base_url == "https://api.example.com/v1"
+
+
+def test_fallback_design_derives_grpc_tools_from_proto(tmp_path):
+    """--no-llm fallback should parse a .proto and emit real grpc_call tools."""
+    from mcp_anything.models.domain import DataSource, DomainModel, UseCase
+
+    proto_path = tmp_path / "greeter.proto"
+    proto_path.write_text('''
+syntax = "proto3";
+service Greeter {
+  rpc SayHello (HelloRequest) returns (HelloReply);
+  rpc SayGoodbye (HelloRequest) returns (HelloReply);
+}
+message HelloRequest { string name = 1; }
+message HelloReply { string message = 1; }
+''')
+    domain_model = DomainModel(
+        server_name="greeter",
+        use_cases=[UseCase(id="uc-01", description="Greet", actor="agent")],
+        data_sources=[DataSource(kind="grpc", path=str(proto_path))],
+        approved=True,
+    )
+    opts = CLIOptions(codebase_path=tmp_path, output_dir=tmp_path / "out", name="greeter", no_llm=True)
+    manifest = GenerationManifest(
+        pipeline_mode="domain", codebase_path=str(tmp_path), output_dir=str(tmp_path / "out"),
+        server_name="greeter", domain_model=domain_model.model_dump(),
+    )
+    ctx = PipelineContext(opts, manifest, Console(quiet=True))
+
+    asyncio.run(ToolDesignPhase().execute(ctx))
+
+    design = ServerDesign.model_validate(ctx.manifest.tool_spec)
+    names = {t.name for t in design.tools}
+    assert names == {"say_hello", "say_goodbye"}
+    for t in design.tools:
+        assert t.impl.strategy == "grpc_call"
+        assert t.impl.grpc_service == "Greeter"
+        assert t.impl.grpc_proto_module == "greeter"
+        assert t.impl.grpc_request_type == "HelloRequest"
+        assert t.impl.grpc_response_type == "HelloReply"
+        assert "name" in {p.name for p in t.parameters}
+
+
 def test_tool_design_2026_rules_group_crud():
     """Group-CRUD: if LLM returns tool_groups, they are preserved in ServerDesign."""
     data = {

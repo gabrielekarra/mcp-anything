@@ -128,11 +128,18 @@ def _deterministic_domain_model(brief: DomainBrief) -> DomainModel:
         GlossaryTerm(term=term, definition=defn)
         for term, defn in brief.glossary.items()
     ]
+    data_sources: list[DataSource] = []
+    if brief.data_source_path:
+        data_sources.append(DataSource(
+            kind=brief.data_source_kind,
+            path=brief.data_source_path,
+        ))
     return DomainModel(
         server_name=brief.server_name,
         domain_description=brief.domain_description,
         use_cases=use_cases,
         glossary=glossary,
+        data_sources=data_sources,
         domain_entities=list(brief.glossary.keys()),
         access_patterns=[uc.description for uc in use_cases],
         approved=False,

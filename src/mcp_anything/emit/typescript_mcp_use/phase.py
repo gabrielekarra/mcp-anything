@@ -195,23 +195,90 @@ export const {tool.name} = {{
             z_type = self._to_zod_type(p.type)
             if not p.required:
                 z_type = f"{z_type}.optional()"
-            lines.append(f'    {p.name}: {z_type}.describe("{p.description}"),')
+            lines.append(
+                f"    {json.dumps(p.name)}: {z_type}.describe({json.dumps(p.description)}),"
+            )
         return "\n".join(lines)
 
     def _render_call(self, tool) -> str:
         impl = tool.impl
+
         if impl.strategy == "http_call" and impl.http_method and impl.http_path:
             base_url_env = f"{self.design.server_name.upper().replace('-','_')}_BASE_URL"
             path = impl.http_path
-            method = impl.http_method.lower()
+            method = impl.http_method.upper()
+            constants = json.dumps(dict(impl.http_query_constants))
+            param_meta = {}
+            for p in tool.parameters:
+                if p.name == "verbose":
+                    continue
+                mapping = impl.arg_mapping.get(p.name, {})
+                style = mapping.get("style") or getattr(p, "location", "") or "query"
+                if style not in {"path", "body", "query"}:
+                    style = "query"
+                param_meta[p.name] = {
+                    "style": style,
+                    "apiName": mapping.get("api_name") or getattr(p, "api_name", "") or p.name,
+                }
+            param_meta_json = json.dumps(param_meta)
             return f'''      const baseUrl = process.env["{base_url_env}"] ?? "http://localhost:8000";
-      const url = `${{baseUrl}}{path}`;
-      const resp = await fetch(url, {{ method: "{method.upper()}" }});
+      const url = new URL(`${{baseUrl}}{path}`);
+      const bodyFields: Record<string, unknown> = {{}};
+      const paramMeta: Record<string, {{ style: string; apiName: string }}> = {param_meta_json};
+      for (const [k, v] of Object.entries(params)) {{
+        if (v == null || k === "verbose") continue;
+        const meta = paramMeta[k] ?? {{ style: "query", apiName: k }};
+        if (meta.style === "path") {{
+          url.pathname = url.pathname.replace(`{{${{meta.apiName}}}}`, encodeURIComponent(String(v)));
+        }} else if (meta.style === "body") {{
+          bodyFields[meta.apiName] = v;
+        }} else {{
+          url.searchParams.set(meta.apiName, String(v));
+        }}
+      }}
+      for (const [k, v] of Object.entries({constants})) {{
+        url.searchParams.set(k, String(v));
+      }}
+      const hasBody = Object.keys(bodyFields).length > 0;
+      const resp = await fetch(url.toString(), {{
+        method: "{method}",
+        headers: hasBody ? {{ "Content-Type": "application/json" }} : undefined,
+        body: hasBody ? JSON.stringify(bodyFields) : undefined,
+      }});
       if (!resp.ok) throw new Error(`HTTP ${{resp.status}}: ${{await resp.text()}}`);
       const result = await resp.json();
       if (params.verbose) return {{ data: result, _meta: {{ status: resp.status }} }};
       return result;'''
-        return f'      return {{ status: "not_implemented", tool: "{tool.name}" }};'
+
+        if impl.strategy == "cli_subcommand" and impl.cli_subcommand:
+            bin_env = f"{self.design.server_name.upper().replace('-','_')}_BIN"
+            default_bin = self.design.server_name
+            return f'''      const {{ spawn }} = await import("node:child_process");
+      const binary = process.env["{bin_env}"] ?? "{default_bin}";
+      const args: string[] = ["{impl.cli_subcommand}"];
+      for (const [k, v] of Object.entries(params)) {{
+        if (v == null || k === "verbose") continue;
+        const flag = `--${{k.replace(/_/g, "-")}}`;
+        if (typeof v === "boolean") {{ if (v) args.push(flag); }}
+        else args.push(flag, String(v));
+      }}
+      const result: any = await new Promise((resolve, reject) => {{
+        const proc = spawn(binary, args);
+        let stdout = "", stderr = "";
+        proc.stdout.on("data", (d: Buffer) => stdout += d.toString());
+        proc.stderr.on("data", (d: Buffer) => stderr += d.toString());
+        proc.on("close", (code: number) => resolve({{ stdout, stderr, returncode: code }}));
+        proc.on("error", reject);
+      }});
+      if (params.verbose) return result;
+      return {{ output: result.stdout || result.stderr, returncode: result.returncode }};'''
+
+        if impl.strategy == "grpc_call" and impl.grpc_service and impl.grpc_method:
+            return f'''      // gRPC requires generated TypeScript stubs (e.g. via @grpc/proto-loader).
+      // Configure {self.design.server_name.upper().replace("-", "_")}_GRPC_TARGET and wire your stub here.
+      throw new Error("gRPC tool '{tool.name}' ({impl.grpc_service}.{impl.grpc_method}) requires a TypeScript gRPC client. Generate stubs and override this method.");'''
+
+        return f'''      throw new Error("Tool '{tool.name}' has no executable strategy. Configure a data source (OpenAPI/gRPC) or implement this tool manually.");'''
 
     def _to_zod_type(self, t: str) -> str:
         mapping = {

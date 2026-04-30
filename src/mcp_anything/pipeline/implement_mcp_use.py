@@ -29,6 +29,7 @@ class ImplementMcpUsePhase(Phase):
         has_cli_tools = any(
             t.impl.strategy in ("cli_subcommand", "cli_function") for t in design.tools
         )
+        has_python_call_tools = any(t.impl.strategy == "python_call" for t in design.tools)
         has_http_tools = any(t.impl.strategy == "http_call" for t in design.tools)
 
         binary_default = design.server_name
@@ -46,6 +47,7 @@ class ImplementMcpUsePhase(Phase):
         content = template.render(
             design=design,
             has_cli_tools=has_cli_tools,
+            has_python_call_tools=has_python_call_tools,
             has_http_tools=has_http_tools,
             binary_default=binary_default,
             http_base_url=http_base_url,

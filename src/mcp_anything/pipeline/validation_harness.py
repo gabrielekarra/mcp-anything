@@ -171,13 +171,16 @@ class ValidationHarnessPhase(Phase):
                         f"{report.threshold:.0%}"
                     )
         else:
-            # Write a structural-only report
+            # Structural-only report: pass if all contract checks pass, eval not gated
+            contracts_ok = all(c.passed for c in contract_checks)
             report = ConformanceReport(
                 server_name=design.server_name,
                 backend_target=getattr(ctx.options, "target", "fastmcp"),
                 eval_cases=eval_cases,
                 threshold=getattr(ctx.options, "eval_threshold", 0.80),
                 contract_checks=contract_checks,
+                eval_run=False,
+                passed=contracts_ok,
             )
             report_path = output_dir / "conformance_report.json"
             report_path.write_text(report.model_dump_json(indent=2))

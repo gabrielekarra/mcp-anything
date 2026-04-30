@@ -6,11 +6,22 @@ from mcp_anything.models.validation import ConformanceReport
 class ConformanceReporter:
     @staticmethod
     def to_ci_output(report: ConformanceReport) -> str:
+        has_live_results = any(
+            r.error is not None or (r.actual_output or "") != "[skipped: run_live=False]"
+            for r in report.results
+        )
+        if report.eval_run or has_live_results:
+            eval_line = (
+                f"  Eval coverage: {report.coverage_ratio:.1%} "
+                f"({'PASS' if report.coverage_ratio >= report.threshold else 'FAIL'}, "
+                f"threshold: {report.threshold:.0%})"
+            )
+        else:
+            eval_line = "  Eval coverage: N/A (pass --run-eval to execute live eval)"
+
         lines = [
             f"Conformance Report — {report.server_name} ({report.backend_target})",
-            f"  Eval coverage: {report.coverage_ratio:.1%} "
-            f"({'PASS' if report.coverage_ratio >= report.threshold else 'FAIL'}, "
-            f"threshold: {report.threshold:.0%})",
+            eval_line,
         ]
 
         if report.contract_checks:

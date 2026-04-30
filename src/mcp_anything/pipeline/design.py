@@ -1,6 +1,7 @@
 """Phase 2: DESIGN — transform AnalysisResult into ServerDesign."""
 
 import json
+import keyword
 import re
 from pathlib import Path
 from typing import Optional
@@ -253,11 +254,25 @@ def _build_tool_impl(cap: Capability, ipc_type: Optional[IPCType]) -> ToolImpl:
     return ToolImpl(strategy="stub")
 
 
+def _safe_module_name(name: str) -> str:
+    """Return a valid Python identifier for a module name."""
+    # Replace hyphens/spaces; ensure it doesn't start with a digit
+    safe = re.sub(r"[^a-zA-Z0-9_]", "_", name)
+    if safe and safe[0].isdigit():
+        safe = "m_" + safe
+    if not safe:
+        safe = "general"
+    # Avoid Python reserved keywords (and, or, if, for, …)
+    if keyword.iskeyword(safe):
+        safe = safe + "_"
+    return safe
+
+
 def _group_tools(tools: list[ToolSpec]) -> dict[str, list[str]]:
     """Group tool names by module/category."""
     modules: dict[str, list[str]] = {}
     for tool in tools:
-        module = tool.module or "general"
+        module = _safe_module_name(tool.module or "general")
         modules.setdefault(module, []).append(tool.name)
     return modules
 
@@ -740,7 +755,10 @@ class DesignPhase(Phase):
             llm_result = await _llm_design(analysis)
             if llm_result and isinstance(llm_result, dict):
                 if "tool_modules" in llm_result:
-                    tool_modules = llm_result["tool_modules"]
+                    tool_modules = {
+                        _safe_module_name(k): v
+                        for k, v in llm_result["tool_modules"].items()
+                    }
                 if "resources" in llm_result:
                     resources = [
                         ResourceSpec(**r) for r in llm_result["resources"]

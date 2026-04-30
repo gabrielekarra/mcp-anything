@@ -266,11 +266,15 @@ def _run_validate_command(args: argparse.Namespace, console: Console) -> None:
     phase = _TmpPhase()
     checks = phase.validate_contract(design, output_dir)
 
+    contracts_ok = all(c.passed for c in checks)
+    run_eval = getattr(args, "run_eval", False)
     report = ConformanceReport(
         server_name=design.server_name,
         backend_target=manifest.extra_data.get("backend_target", "fastmcp") if manifest.extra_data else "fastmcp",
         contract_checks=checks,
         threshold=getattr(args, "eval_threshold", 0.80),
+        eval_run=run_eval,
+        passed=contracts_ok if not run_eval else False,  # live eval pass/fail set below
     )
 
     output = ConformanceReporter.to_ci_output(report)

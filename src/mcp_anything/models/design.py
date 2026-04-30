@@ -24,10 +24,16 @@ class ToolImpl(BaseModel):
     # For http_call: HTTP method and path
     http_method: str = ""  # GET, POST, PUT, DELETE, PATCH
     http_path: str = ""    # e.g. /api/users/{id}
+    # Fixed query params merged into every call. Required for RPC-style HTTP APIs
+    # (MediaWiki /api.php, JSON-RPC over HTTP, action-discriminated endpoints) where
+    # the path alone doesn't identify the operation. e.g. {"action": "query", "format": "json"}.
+    http_query_constants: dict[str, str] = Field(default_factory=dict)
     # For gRPC protocol_call tools: service class, RPC method, and stub module
     grpc_service: str = ""       # e.g. "UserService"
     grpc_method: str = ""        # e.g. "GetUser"
     grpc_proto_module: str = ""  # stem of the .proto file, e.g. "user"
+    grpc_request_type: str = ""  # e.g. "GetUserRequest"
+    grpc_response_type: str = ""  # e.g. "GetUserResponse"
     # Mapping of tool param names to CLI argument forms
     # e.g. {"input_path": {"position": 0}, "format": {"flag": "--format"}}
     arg_mapping: dict[str, dict] = Field(default_factory=dict)
@@ -138,3 +144,4 @@ class ServerDesign(BaseModel):
     tool_groups: list[ToolGroup] = Field(default_factory=list)
     composed_tools: list[ComposedTool] = Field(default_factory=list)
     discovery_endpoint: bool = True
+    backend_base_url: str = ""  # extracted from OpenAPI servers[0].url, if present

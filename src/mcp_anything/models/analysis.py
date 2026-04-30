@@ -64,6 +64,7 @@ class ParameterSpec(BaseModel):
     properties: Optional[list["ParameterSpec"]] = None  # nested fields for object types
     original_type: Optional[str] = None  # original language type name (e.g. "Fruit") for resolution
     location: str = ""  # "query", "path", "body", or "" (unknown)
+    api_name: str = ""  # original backend/API parameter name when `name` is code-safe
 
 
 class Capability(BaseModel):

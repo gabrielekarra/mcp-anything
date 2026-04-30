@@ -29,6 +29,7 @@ dependencies = [
     "rich>=13.0",
     "pyyaml>=6.0",
     "javalang>=0.13.0",
+    "grpcio-tools>=1.60.0",
 ]
 
 [project.urls]
@@ -52,3 +53,6 @@ packages = ["src/mcp_anything"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "realworld: tests that clone real repos from GitHub (skip with -m 'not realworld')",
+]

@@ -198,18 +198,24 @@ def register_tools(server: FastMCP{% if design.backend %}, _get_backend{% endif 
         query_params: dict[str, str] = {}
         _body_fields: dict = {}
         {% for param in tool.parameters %}
-        {% if tool.impl.arg_mapping.get(param.name, {}).get("style") == "path" %}
-        path_params["{{ param.name }}"] = str({{ param.name | safe_identifier }})
-        {% elif tool.impl.arg_mapping.get(param.name, {}).get("style") == "body" %}
+        {% if param.name == "verbose" %}
+        {% else %}
+        {% set mapping = tool.impl.arg_mapping.get(param.name, {}) %}
+        {% set style = mapping.get("style", param.location or "") %}
+        {% set api_name = mapping.get("api_name", param.api_name or param.name) %}
+        {% if style == "path" %}
+        path_params["{{ api_name }}"] = str({{ param.name | safe_identifier }})
+        {% elif style == "body" %}
         if {{ param.name | safe_identifier }} is not None:
             {% if param is has_properties %}
-            _body_fields["{{ param.name }}"] = {{ param.name | safe_identifier }}.model_dump() if hasattr({{ param.name | safe_identifier }}, "model_dump") else {{ param.name | safe_identifier }}
+            _body_fields["{{ api_name }}"] = {{ param.name | safe_identifier }}.model_dump() if hasattr({{ param.name | safe_identifier }}, "model_dump") else {{ param.name | safe_identifier }}
             {% else %}
-            _body_fields["{{ param.name }}"] = {{ param.name | safe_identifier }}
+            _body_fields["{{ api_name }}"] = {{ param.name | safe_identifier }}
             {% endif %}
         {% else %}
         if {{ param.name | safe_identifier }} is not None:
-            query_params["{{ param.name }}"] = str({{ param.name | safe_identifier }})
+            query_params["{{ api_name }}"] = str({{ param.name | safe_identifier }})
+        {% endif %}
         {% endif %}
         {% endfor %}
         request_body: dict | None = _body_fields if _body_fields else None

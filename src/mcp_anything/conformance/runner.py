@@ -37,6 +37,7 @@ class EvalRunner:
             backend_target=self.backend_target,
             eval_cases=eval_cases,
             threshold=self.eval_threshold,
+            eval_run=self.run_live,
         )
 
         if not self.run_live:
