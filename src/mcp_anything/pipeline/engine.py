@@ -60,6 +60,10 @@ def _load_phases(names: list[str], target: str = "fastmcp") -> list[Phase]:
                 from mcp_anything.emit.typescript_mcp_use.phase import TypeScriptMcpUseEmitPhase
 
                 phases.append(TypeScriptMcpUseEmitPhase())
+            elif target == "skybridge":
+                from mcp_anything.emit.typescript_skybridge.phase import TypeScriptSkybridgeEmitPhase
+
+                phases.append(TypeScriptSkybridgeEmitPhase())
             else:
                 from mcp_anything.emit.python_fastmcp.phase import PythonFastMCPEmitPhase
 

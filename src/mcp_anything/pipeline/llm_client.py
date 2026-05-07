@@ -78,3 +78,28 @@ def call_llm_for_json(
         f"LLM did not return valid JSON after {_MAX_RETRIES} attempts. "
         f"Last error: {last_error}"
     )
+
+
+def call_llm_for_text(
+    prompt: str,
+    system: Optional[str] = None,
+    model: str = _DEFAULT_MODEL,
+    max_tokens: int = 8000,
+) -> str:
+    """Call the Claude API and return the raw text response.
+
+    Raises ImportError if anthropic is not installed.
+    """
+    import anthropic
+
+    client = anthropic.Anthropic()
+    kwargs: dict = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if system:
+        kwargs["system"] = system
+
+    response = client.messages.create(**kwargs)
+    return response.content[0].text.strip()

@@ -1,0 +1,33 @@
+{
+  "name": "spotify-playlist-generator",
+  "version": "1.0.0",
+  "description": "A Spotify playlist generator that turns a user's target duration and mood or vib",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "nodemon --exec \"tsx src/server.ts\" --watch src --ext ts,tsx",
+    "build": "tsc",
+    "build:web": "vite build --outDir web-dist",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "skybridge": "latest",
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@skybridge/devtools": "latest",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.3.0",
+    "vite": "^7.3.1",
+    "nodemon": "^3.0.0",
+    "tsx": "^4.0.0"
+  }
+}

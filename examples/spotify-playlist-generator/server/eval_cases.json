@@ -1,0 +1,56 @@
+[
+  {
+    "id": "ec-001",
+    "brief_item_id": "uc-01",
+    "tool_name": "uc_01",
+    "input_params": {},
+    "expected_output_pattern": "",
+    "expected_error": null,
+    "case_type": "happy_path"
+  },
+  {
+    "id": "ec-002",
+    "brief_item_id": "uc-01",
+    "tool_name": "uc_01",
+    "input_params": {},
+    "expected_output_pattern": "",
+    "expected_error": null,
+    "case_type": "edge_case"
+  },
+  {
+    "id": "ec-003",
+    "brief_item_id": "uc-02",
+    "tool_name": "uc_02",
+    "input_params": {},
+    "expected_output_pattern": "",
+    "expected_error": null,
+    "case_type": "happy_path"
+  },
+  {
+    "id": "ec-004",
+    "brief_item_id": "uc-02",
+    "tool_name": "uc_02",
+    "input_params": {},
+    "expected_output_pattern": "",
+    "expected_error": null,
+    "case_type": "edge_case"
+  },
+  {
+    "id": "ec-005",
+    "brief_item_id": "uc-03",
+    "tool_name": "uc_03",
+    "input_params": {},
+    "expected_output_pattern": "",
+    "expected_error": null,
+    "case_type": "happy_path"
+  },
+  {
+    "id": "ec-006",
+    "brief_item_id": "uc-03",
+    "tool_name": "uc_03",
+    "input_params": {},
+    "expected_output_pattern": "",
+    "expected_error": null,
+    "case_type": "edge_case"
+  }
+]

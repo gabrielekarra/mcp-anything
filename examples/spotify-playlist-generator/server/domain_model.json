@@ -1,0 +1,71 @@
+{
+  "server_name": "spotify-playlist-generator",
+  "domain_description": "A Spotify playlist generator that turns a user's target duration and mood or vibe into a real Spotify playlist preview and, when requested, creates that playlist in the user's Spotify account.\n",
+  "use_cases": [
+    {
+      "id": "uc-01",
+      "description": "Generate a playlist from a mood or vibe and target duration, returning selected tracks with album cover, track name, duration, and singer or artist names.",
+      "actor": "agent",
+      "data_objects": [],
+      "preconditions": [],
+      "expected_outcome": ""
+    },
+    {
+      "id": "uc-02",
+      "description": "Create a Spotify playlist for the current user from the generated track list.",
+      "actor": "agent",
+      "data_objects": [],
+      "preconditions": [],
+      "expected_outcome": ""
+    },
+    {
+      "id": "uc-03",
+      "description": "Help the user set up OAuth for Spotify playlist write access without storing secrets in generated files.",
+      "actor": "agent",
+      "data_objects": [],
+      "preconditions": [],
+      "expected_outcome": ""
+    }
+  ],
+  "glossary": [
+    {
+      "term": "Playlist",
+      "definition": "A user-owned Spotify collection of tracks.",
+      "aliases": []
+    },
+    {
+      "term": "Mood",
+      "definition": "A natural language vibe such as rainy indie, workout, chill focus, party, romantic, or late-night drive.",
+      "aliases": []
+    },
+    {
+      "term": "Track",
+      "definition": "A Spotify song item with name, artists, album artwork, URI, Spotify URL, and duration.",
+      "aliases": []
+    },
+    {
+      "term": "Duration",
+      "definition": "The requested total listening time for the generated playlist.",
+      "aliases": []
+    },
+    {
+      "term": "Market",
+      "definition": "An ISO 3166-1 alpha-2 country code used by Spotify to filter track availability.",
+      "aliases": []
+    }
+  ],
+  "data_sources": [],
+  "domain_entities": [
+    "Playlist",
+    "Mood",
+    "Track",
+    "Duration",
+    "Market"
+  ],
+  "access_patterns": [
+    "Generate a playlist from a mood or vibe and target duration, returning selected tracks with album cover, track name, duration, and singer or artist names.",
+    "Create a Spotify playlist for the current user from the generated track list.",
+    "Help the user set up OAuth for Spotify playlist write access without storing secrets in generated files."
+  ],
+  "approved": false
+}

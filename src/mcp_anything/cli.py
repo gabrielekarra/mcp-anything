@@ -52,9 +52,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gen.add_argument(
         "--target",
-        choices=["fastmcp", "mcp-use"],
+        choices=["fastmcp", "mcp-use", "skybridge"],
         default="fastmcp",
-        help="Target MCP SDK. 'fastmcp' (default) generates Python/FastMCP. 'mcp-use' generates TypeScript using the mcp-use SDK.",
+        help="Target MCP SDK. 'fastmcp' (default) generates Python/FastMCP. 'mcp-use' generates TypeScript/mcp-use. 'skybridge' generates TypeScript/Skybridge (MCP + ChatGPT App with React views).",
     )
     gen.add_argument(
         "--include",
@@ -120,9 +120,9 @@ def build_parser() -> argparse.ArgumentParser:
     bld.add_argument("-o", "--output-dir", type=Path)
     bld.add_argument(
         "--target",
-        choices=["fastmcp", "mcp-use"],
+        choices=["fastmcp", "mcp-use", "skybridge"],
         default="fastmcp",
-        help="Output backend: fastmcp (Python) or mcp-use (TypeScript)",
+        help="Output backend: fastmcp (Python), mcp-use (TypeScript), or skybridge (TypeScript/MCP + ChatGPT App with React views).",
     )
     bld.add_argument("--resume", action="store_true")
     bld.add_argument("--auto-approve", dest="auto_approve", action="store_true")
