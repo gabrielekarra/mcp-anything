@@ -54,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--target",
         choices=["fastmcp", "mcp-use"],
         default="fastmcp",
-        help="Target MCP SDK. 'fastmcp' (default) generates Python/FastMCP. 'mcp-use' generates TypeScript using the mcp-use SDK.",
+        help="Target MCP SDK. 'fastmcp' (default) generates Python/FastMCP. 'mcp-use' generates TypeScript/mcp-use. For Skybridge output use 'mcp-anything build --target skybridge'.",
     )
     gen.add_argument(
         "--include",
@@ -120,9 +120,9 @@ def build_parser() -> argparse.ArgumentParser:
     bld.add_argument("-o", "--output-dir", type=Path)
     bld.add_argument(
         "--target",
-        choices=["fastmcp", "mcp-use"],
+        choices=["fastmcp", "mcp-use", "skybridge"],
         default="fastmcp",
-        help="Output backend: fastmcp (Python) or mcp-use (TypeScript)",
+        help="Output backend: fastmcp (Python), mcp-use (TypeScript), or skybridge (TypeScript/MCP + ChatGPT App with React views).",
     )
     bld.add_argument("--resume", action="store_true")
     bld.add_argument("--auto-approve", dest="auto_approve", action="store_true")
@@ -226,8 +226,7 @@ def _run_domain_command(
 
     output_dir = getattr(args, "output_dir", None) or Path(f"./mcp-{name}-server")
 
-    # Auto-detect codebase: if --data-source is a directory, inject into brief as
-    # data_source_kind="codebase" and route through the legacy analyzer first.
+    # Auto-detect data-source mode: directory → codebase analysis; spec file → OpenAPI/gRPC.
     domain_brief: Optional[dict] = None
     codebase_path = data_source or Path(".")
     if data_source and Path(data_source).is_dir() and brief_file:
@@ -243,6 +242,22 @@ def _run_domain_command(
             )
         except Exception as exc:
             console.print(f"[yellow]Warning:[/yellow] Could not patch brief for codebase mode: {exc}")
+    elif data_source and Path(data_source).is_file() and brief_file:
+        # Spec file (OpenAPI YAML/JSON, .proto): inject path + kind into the brief so
+        # tool_design can parse routes deterministically from ground truth.
+        _SPEC_KINDS = {".yaml": "openapi", ".yml": "openapi", ".json": "openapi", ".proto": "grpc"}
+        kind = _SPEC_KINDS.get(Path(data_source).suffix.lower(), "other")
+        try:
+            raw = _yaml.safe_load(Path(brief_file).read_text())
+            raw["data_source_kind"] = kind
+            raw["data_source_path"] = str(Path(data_source).resolve())
+            domain_brief = raw
+            console.print(
+                f"[dim]Spec file detected ({kind}): {data_source} — "
+                "tool design will use authoritative routes from spec.[/dim]"
+            )
+        except Exception as exc:
+            console.print(f"[yellow]Warning:[/yellow] Could not patch brief with spec file: {exc}")
 
     options = CLIOptions(
         codebase_path=Path(codebase_path),

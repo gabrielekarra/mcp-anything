@@ -1,0 +1,70 @@
+[
+  {
+    "id": "ec-001",
+    "brief_item_id": "uc-01",
+    "tool_name": "generate_spotify_playlist",
+    "input_params": {
+      "duration_minutes": 30,
+      "mood_vibe": "chill focus",
+      "market": "US"
+    },
+    "expected_output_pattern": "tracks",
+    "expected_error": null,
+    "case_type": "happy_path"
+  },
+  {
+    "id": "ec-002",
+    "brief_item_id": "uc-01",
+    "tool_name": "generate_spotify_playlist",
+    "input_params": {
+      "duration_minutes": 0,
+      "mood_vibe": ""
+    },
+    "expected_output_pattern": "",
+    "expected_error": "missing required",
+    "case_type": "edge_case"
+  },
+  {
+    "id": "ec-003",
+    "brief_item_id": "uc-02",
+    "tool_name": "setup_spotify_oauth",
+    "input_params": {
+      "redirect_uri": "http://127.0.0.1:8888/callback"
+    },
+    "expected_output_pattern": "authorization_url",
+    "expected_error": null,
+    "case_type": "happy_path"
+  },
+  {
+    "id": "ec-004",
+    "brief_item_id": "uc-02",
+    "tool_name": "setup_spotify_oauth",
+    "input_params": {
+      "redirect_uri": ""
+    },
+    "expected_output_pattern": "authorization_url",
+    "expected_error": null,
+    "case_type": "edge_case"
+  },
+  {
+    "id": "ec-005",
+    "brief_item_id": "uc-03",
+    "tool_name": "exchange_spotify_code",
+    "input_params": {
+      "code": "AQDxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "redirect_uri": "http://127.0.0.1:8888/callback"
+    },
+    "expected_output_pattern": "refresh_token",
+    "expected_error": null,
+    "case_type": "happy_path"
+  },
+  {
+    "id": "ec-006",
+    "brief_item_id": "uc-03",
+    "tool_name": "exchange_spotify_code",
+    "input_params": {},
+    "expected_output_pattern": "",
+    "expected_error": "missing required",
+    "case_type": "edge_case"
+  }
+]

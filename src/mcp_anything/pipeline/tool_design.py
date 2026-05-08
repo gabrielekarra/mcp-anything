@@ -66,7 +66,17 @@ You are a senior MCP server architect. Design tools using these 2026 rules:
 7. PARAMETER NAMES: Use domain vocabulary from the glossary. No generic names like "id",
    prefer "task_id", "project_id", etc.
 
-8. NON-REST HTTP APIs: Some HTTP backends use RPC-style or action-discriminated endpoints
+8. ARG_MAPPING (REQUIRED for http_call): Every http_call tool MUST include an arg_mapping object
+   where each parameter (except verbose) has a "style" of "path", "query", or "body":
+   - "path": parameter appears as {param} in http_path — substituted into the URL
+   - "query": appended as a URL query string parameter
+   - "body": sent in the JSON request body (POST/PUT/PATCH only)
+   If http_path contains {param_name}, that param MUST have style="path".
+   Parameters for GET/DELETE are typically "query" unless in the path.
+   Parameters for POST/PUT/PATCH body fields are "body".
+   The "api_name" field is the actual API parameter name if different from the tool param name.
+
+9. NON-REST HTTP APIs: Some HTTP backends use RPC-style or action-discriminated endpoints
    instead of REST resources (MediaWiki /api.php, JSON-RPC over HTTP, SOAP, generic /rpc
    endpoints). For these:
    - `http_path` is the SAME for every operation (e.g. "/api.php").
@@ -162,6 +172,9 @@ Return a JSON object with:
         "http_method": "GET",
         "http_path": "/path/{{param}}",
         "http_query_constants": {{}},
+        "arg_mapping": {{
+          "param_name": {{"style": "path|query|body", "api_name": "actual_api_name_if_different"}}
+        }},
         "python_module": "package.module (for python_call, e.g. 'scrapegraphai.graphs')",
         "python_function": "function_or_method_name (for python_call)",
         "python_class": "ClassName (for python_call when calling an instance method; leave empty for module-level functions)",
@@ -332,11 +345,22 @@ def _parse_tool_spec(data: dict) -> ServerDesign:
             http_query_constants = {str(k): str(v) for k, v in raw_constants.items()}
         else:
             http_query_constants = {}
+        # Parse arg_mapping from LLM output — validates style values.
+        raw_arg_mapping = impl_data.get("arg_mapping") or {}
+        arg_mapping: dict[str, dict] = {}
+        if isinstance(raw_arg_mapping, dict):
+            for pname, meta in raw_arg_mapping.items():
+                if isinstance(meta, dict) and meta.get("style") in {"path", "query", "body"}:
+                    arg_mapping[str(pname)] = {
+                        "style": meta["style"],
+                        "api_name": str(meta.get("api_name") or pname),
+                    }
         impl = ToolImpl(
             strategy=impl_data.get("strategy", "http_call"),
             http_method=impl_data.get("http_method", ""),
             http_path=impl_data.get("http_path", ""),
             http_query_constants=http_query_constants,
+            arg_mapping=arg_mapping,
             python_module=impl_data.get("python_module", ""),
             python_function=impl_data.get("python_function", ""),
             python_class=impl_data.get("python_class", ""),
@@ -578,6 +602,27 @@ class ToolDesignPhase(Phase):
         if ctx.options.no_llm:
             ctx.console.print("[dim]--no-llm: generating minimal tool spec from domain model.[/dim]")
             return self._fallback_design(domain_model)
+
+        # When a parseable data source is provided (OpenAPI spec, .proto), extract
+        # authoritative tool impls from it first — routes, methods, and param styles
+        # are ground truth. Then let the LLM reshape names/descriptions/grouping only,
+        # exactly like codebase mode does with seed tools. This guarantees the generated
+        # server will call the real backend paths without any manual patches.
+        seed_tools = self._derive_tools_from_data_source(domain_model)
+        if seed_tools:
+            ctx.console.print(
+                f"[dim]Parsed {len(seed_tools)} tools from data source spec; "
+                "reshaping with domain brief...[/dim]"
+            )
+            seed_design = ServerDesign(
+                server_name=domain_model.server_name,
+                server_description=domain_model.domain_description,
+                tools=seed_tools,
+                enable_telemetry=True,
+                discovery_endpoint=True,
+                backend_base_url=self._get_backend_base_url(domain_model),
+            )
+            return self._reshape_tools(domain_model, seed_design, ctx)
 
         try:
             from mcp_anything.pipeline.llm_client import call_llm_for_json

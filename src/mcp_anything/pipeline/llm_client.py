@@ -78,3 +78,49 @@ def call_llm_for_json(
         f"LLM did not return valid JSON after {_MAX_RETRIES} attempts. "
         f"Last error: {last_error}"
     )
+
+
+def call_llm_for_text(
+    prompt: str,
+    system: Optional[str] = None,
+    model: str = _DEFAULT_MODEL,
+    max_tokens: int = 8000,
+) -> str:
+    """Call the Claude API and return the raw text response.
+
+    Retries up to _MAX_RETRIES times on transient failures or empty responses.
+
+    Raises ImportError if anthropic is not installed.
+    Raises RuntimeError if all retries are exhausted.
+    """
+    import anthropic
+
+    client = anthropic.Anthropic()
+    kwargs: dict = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if system:
+        kwargs["system"] = system
+
+    last_error: Optional[str] = None
+    for _ in range(_MAX_RETRIES):
+        try:
+            response = client.messages.create(**kwargs)
+            text = response.content[0].text.strip() if response.content else ""
+            if text:
+                if getattr(response, "stop_reason", None) == "max_tokens":
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "LLM response hit max_tokens (%d) — output may be truncated.", max_tokens
+                    )
+                return text
+            last_error = "Empty text response from LLM"
+        except Exception as exc:  # noqa: BLE001 — surface to caller after retries
+            last_error = f"{type(exc).__name__}: {exc}"
+
+    raise RuntimeError(
+        f"LLM did not return usable text after {_MAX_RETRIES} attempts. "
+        f"Last error: {last_error}"
+    )

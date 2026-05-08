@@ -40,6 +40,7 @@ class ConformanceReport(BaseModel):
     threshold: float = 0.80
     passed: bool = False
     eval_run: bool = False  # True only when --run-eval was requested
+    skipped: bool = False  # True when no live eval ran; pair with passed=False to avoid false success
     contract_checks: list[ContractCheckResult] = Field(default_factory=list)
 
     def compute_coverage(self) -> None:

@@ -5,7 +5,7 @@ LLM-driven pipeline that takes a customer's domain brief (use-cases in natural l
 and a data source (OpenAPI / gRPC / DB schema / SDK), and produces a fully-implemented,
 optimized MCP server plus skill bundle and validation artifacts.
 
-Two output backends: **Python/FastMCP** and **TypeScript/mcp-use**.
+Three output backends: **Python/FastMCP**, **TypeScript/mcp-use**, and **TypeScript/Skybridge** (MCP + ChatGPT App with React views).
 
 Legacy path: `mcp-anything generate <path>` (codebase scanner, backwards-compatible).
 Domain path: `mcp-anything build --brief <brief.yaml>` (new, recommended).
@@ -21,7 +21,7 @@ Domain path: `mcp-anything build --brief <brief.yaml>` (new, recommended).
 5 phases: DOMAIN_MODELING → TOOL_DESIGN → EMIT → SKILL_BUNDLE → VALIDATION_HARNESS
 - Phase 1 (`domain_modeling.py`): LLM reads brief + data source → `domain_model.json`
 - Phase 2 (`tool_design.py`): LLM shapes tools per 2026 rules → `tool_spec.yaml`
-- Phase 3 (`emit/python_fastmcp/` or `emit/typescript_mcp_use/`): code generation
+- Phase 3 (`emit/python_fastmcp/`, `emit/typescript_mcp_use/`, or `emit/typescript_skybridge/`): code generation
 - Phase 4 (`skill_bundle.py`): LLM generates `SKILL.md` + `quick_queries.json`
 - Phase 5 (`validation_harness.py`): LLM generates `eval_cases.json`, optional live eval
 - Output contract: `CONTRACT.md` — 29 testable items (C-01..C-29) both emitters must satisfy
@@ -51,6 +51,7 @@ Domain path: `mcp-anything build --brief <brief.yaml>` (new, recommended).
 - `src/mcp_anything/pipeline/llm_client.py` — shared LLM call utility with JSON retry
 - `src/mcp_anything/emit/python_fastmcp/phase.py` — Phase 3 (Python): ServerDesign → FastMCP server
 - `src/mcp_anything/emit/typescript_mcp_use/phase.py` — Phase 3 (TS): ServerDesign → mcp-use server
+- `src/mcp_anything/emit/typescript_skybridge/phase.py` — Phase 3 (Skybridge): ServerDesign → MCP + ChatGPT App server with LLM-generated React views
 - `src/mcp_anything/emit/base.py` — EmitPhase ABC + structural CONTRACT.md checker
 - `src/mcp_anything/pipeline/skill_bundle.py` — Phase 4: SKILL.md + quick_queries.json
 - `src/mcp_anything/pipeline/validation_harness.py` — Phase 5: eval_cases + conformance_report
