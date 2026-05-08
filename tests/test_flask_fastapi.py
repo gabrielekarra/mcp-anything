@@ -95,9 +95,82 @@ class TestFastAPIAnalyzer:
         result = analyze_flask_fastapi_file(fake_fastapi_app, fi)
         create_route = next(r for r in result.routes if r.function_name == "create_user")
         assert create_route.http_method == "POST"
-        # Pydantic model param → object type
-        user_param = next(p for p in create_route.parameters if p.name == "user")
-        assert user_param.type == "object"
+        # Pydantic model param `user: UserCreate` is expanded into its fields.
+        names = {p.name for p in create_route.parameters}
+        assert {"name", "email", "age"} <= names
+        assert "user" not in names
+        name_param = next(p for p in create_route.parameters if p.name == "name")
+        assert name_param.location == "body"
+        age_param = next(p for p in create_route.parameters if p.name == "age")
+        assert age_param.required is False  # has default = 25
+        assert age_param.default == "25"
+
+    def test_pydantic_body_collides_with_path_param(self, tmp_path):
+        (tmp_path / "main.py").write_text(
+            'from fastapi import FastAPI\n'
+            'from pydantic import BaseModel\n'
+            'app = FastAPI()\n'
+            'class UserPatch(BaseModel):\n'
+            '    user_id: int\n'
+            '    nickname: str\n'
+            '@app.put("/users/{user_id}")\n'
+            'async def patch_user(user_id: int, body: UserPatch):\n'
+            '    """Patch user."""\n'
+            '    return {}\n'
+        )
+        fi = FileInfo(path="main.py", language=Language.PYTHON, size_bytes=0, line_count=0)
+        result = analyze_flask_fastapi_file(tmp_path, fi)
+        route = next(r for r in result.routes if r.function_name == "patch_user")
+        names = [p.name for p in route.parameters]
+        # Path param wins; nickname pulled from the model; body blob removed.
+        assert names.count("user_id") == 1
+        assert "nickname" in names
+        assert "body" not in names
+
+    def test_pydantic_body_cross_file_import(self, tmp_path):
+        (tmp_path / "models.py").write_text(
+            'from pydantic import BaseModel\n'
+            'from typing import Optional\n'
+            'class CreateOrder(BaseModel):\n'
+            '    item_id: str\n'
+            '    quantity: int = 1\n'
+            '    note: Optional[str] = None\n'
+        )
+        (tmp_path / "main.py").write_text(
+            'from fastapi import FastAPI\n'
+            'from models import CreateOrder\n'
+            'app = FastAPI()\n'
+            '@app.post("/orders")\n'
+            'async def create_order(order: CreateOrder):\n'
+            '    """Create order."""\n'
+            '    return {}\n'
+        )
+        fi = FileInfo(path="main.py", language=Language.PYTHON, size_bytes=0, line_count=0)
+        result = analyze_flask_fastapi_file(tmp_path, fi)
+        route = next(r for r in result.routes if r.function_name == "create_order")
+        names = {p.name for p in route.parameters}
+        assert names == {"item_id", "quantity", "note"}
+        assert "order" not in names
+        note_param = next(p for p in route.parameters if p.name == "note")
+        assert note_param.required is False
+
+    def test_non_pydantic_class_falls_through_unchanged(self, tmp_path):
+        (tmp_path / "main.py").write_text(
+            'from fastapi import FastAPI\n'
+            'app = FastAPI()\n'
+            'class MysterySession:\n'
+            '    pass\n'
+            '@app.post("/x")\n'
+            'async def do_x(blob: MysterySession):\n'
+            '    """Do x."""\n'
+            '    return {}\n'
+        )
+        fi = FileInfo(path="main.py", language=Language.PYTHON, size_bytes=0, line_count=0)
+        result = analyze_flask_fastapi_file(tmp_path, fi)
+        route = next(r for r in result.routes if r.function_name == "do_x")
+        # Not a BaseModel → keep the original opaque object param.
+        names = {p.name for p in route.parameters}
+        assert names == {"blob"}
 
     def test_extracts_delete(self, fake_fastapi_app):
         fi = FileInfo(path="main.py", language=Language.PYTHON, size_bytes=0, line_count=0)

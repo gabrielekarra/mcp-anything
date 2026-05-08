@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Optional
 
 from mcp_anything.models.analysis import Capability, FileInfo, IPCType, Language, ParameterSpec
+from mcp_anything.analysis.import_resolver import resolve_python_import
+from mcp_anything.analysis.schema_extractor import SchemaField, extract_pydantic_fields
 
 # HTTP method decorators
 _ROUTE_METHODS = {"get", "post", "put", "delete", "patch", "head", "options"}
@@ -216,14 +218,89 @@ def _extract_route_decorator(
     return None
 
 
+def _is_pydantic_model_class(node: ast.ClassDef) -> bool:
+    """Check whether a class inherits from Pydantic's BaseModel."""
+    for base in node.bases:
+        if isinstance(base, ast.Name) and base.id == "BaseModel":
+            return True
+        if isinstance(base, ast.Attribute) and base.attr == "BaseModel":
+            return True
+    return False
+
+
+def _collect_local_pydantic_models(tree: ast.Module) -> set[str]:
+    """Return the names of Pydantic BaseModel subclasses defined in the module."""
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and _is_pydantic_model_class(node):
+            names.add(node.name)
+    return names
+
+
+def _schema_field_to_param(field: SchemaField, path_params: set[str]) -> Optional[ParameterSpec]:
+    """Convert a SchemaField to a ParameterSpec for an HTTP body."""
+    if field.name in path_params:
+        return None
+    return ParameterSpec(
+        name=field.name,
+        type=field.type,
+        description=field.description,
+        required=field.required,
+        default=field.default,
+        location="body",
+    )
+
+
+def _resolve_pydantic_fields(
+    type_name: str,
+    source: str,
+    local_models: set[str],
+    root: Optional[Path],
+    file_path: Optional[str],
+) -> Optional[list[SchemaField]]:
+    """Resolve a class name to its Pydantic fields, in this file or via imports.
+
+    Returns None when the class is not recognized as a Pydantic model.
+    """
+    if type_name in local_models:
+        fields = extract_pydantic_fields(source, type_name)
+        return fields or None
+
+    if root is None or file_path is None:
+        return None
+
+    resolved = resolve_python_import(source, type_name, root, file_path)
+    if resolved is None:
+        return None
+    target_path, target_name = resolved
+    try:
+        target_source = target_path.read_text(errors="replace")
+    except OSError:
+        return None
+    try:
+        target_tree = ast.parse(target_source)
+    except SyntaxError:
+        return None
+    target_locals = _collect_local_pydantic_models(target_tree)
+    if target_name not in target_locals:
+        return None
+    fields = extract_pydantic_fields(target_source, target_name)
+    return fields or None
+
+
 def _extract_function_params(
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     path_params: set[str],
     framework: str,
+    source: str = "",
+    local_pydantic_models: Optional[set[str]] = None,
+    root: Optional[Path] = None,
+    file_path: Optional[str] = None,
 ) -> list[ParameterSpec]:
     """Extract parameters from a route handler function."""
     params: list[ParameterSpec] = []
     args = node.args
+    local_pydantic_models = local_pydantic_models or set()
 
     num_args = len(args.args)
     num_defaults = len(args.defaults)
@@ -280,13 +357,30 @@ def _extract_function_params(
         # Determine type
         param_type = _annotation_to_mcp_type(arg.annotation)
 
-        # Check if it's a Pydantic model (class name as type) → body param
+        # Check if it's a Pydantic model (class name as type) → body param.
+        # When the model is resolvable, expand its fields into individual
+        # ParameterSpecs so the LLM sees real argument names instead of a
+        # single opaque object blob.
         is_body = False
         if arg.annotation and isinstance(arg.annotation, ast.Name):
             type_name = arg.annotation.id
-            if type_name[0].isupper() and type_name not in _TYPE_MAP:
+            if type_name and type_name[0].isupper() and type_name not in _TYPE_MAP:
                 is_body = True
                 param_type = "object"
+                fields = _resolve_pydantic_fields(
+                    type_name, source, local_pydantic_models, root, file_path,
+                )
+                if fields:
+                    seen = {p.name for p in params} | path_params
+                    for f in fields:
+                        if f.name in seen:
+                            continue
+                        spec = _schema_field_to_param(f, path_params)
+                        if spec is None:
+                            continue
+                        params.append(spec)
+                        seen.add(f.name)
+                    continue
 
         # Check for FastAPI param annotations: Query(), Path(), Body()
         description = ""
@@ -428,6 +522,10 @@ def analyze_flask_fastapi_file(
     if app_vars:
         result.app_variable = next(iter(app_vars))
 
+    # Collect Pydantic models defined locally in this file (used to expand
+    # body-typed parameters into individual fields).
+    local_pydantic_models = _collect_local_pydantic_models(tree)
+
     # Step 2: Find route-decorated functions
     all_vars = app_vars | router_vars
     if not all_vars:
@@ -460,7 +558,15 @@ def analyze_flask_fastapi_file(
             path_params = _extract_path_params(path)
 
             # Extract function parameters
-            params = _extract_function_params(node, path_params, result.framework)
+            params = _extract_function_params(
+                node,
+                path_params,
+                result.framework,
+                source=source,
+                local_pydantic_models=local_pydantic_models,
+                root=root,
+                file_path=file_info.path,
+            )
 
             # Generate description
             desc = _make_description(node)
