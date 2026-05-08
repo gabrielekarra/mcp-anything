@@ -594,7 +594,7 @@ CMD ["node", "dist/server.js"]
             t.impl.strategy == "protocol_call" for t in self.design.tools
         )
         dependencies = {
-            "skybridge": "latest",
+            "skybridge": "^0.36.2",
             "@modelcontextprotocol/sdk": "^1.27.0",
             "zod": "^3.25.0",
         }
@@ -614,7 +614,7 @@ CMD ["node", "dist/server.js"]
             },
             "dependencies": dependencies,
             "devDependencies": {
-                "@skybridge/devtools": "latest",
+                "@skybridge/devtools": "^0.36.2",
                 "react": "^19.0.0",
                 "react-dom": "^19.0.0",
                 "@types/react": "^19.0.0",

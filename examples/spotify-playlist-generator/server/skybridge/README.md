@@ -12,7 +12,7 @@ Results include each chosen song's cover image, name, duration, and singer/artis
 
 ## Requirements
 
-- Node.js 22+
+- Node.js 22.12+
 - pnpm 10+
 - A Spotify developer app
 

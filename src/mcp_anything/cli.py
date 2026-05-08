@@ -52,9 +52,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gen.add_argument(
         "--target",
-        choices=["fastmcp", "mcp-use", "skybridge"],
+        choices=["fastmcp", "mcp-use"],
         default="fastmcp",
-        help="Target MCP SDK. 'fastmcp' (default) generates Python/FastMCP. 'mcp-use' generates TypeScript/mcp-use. 'skybridge' generates TypeScript/Skybridge (MCP + ChatGPT App with React views).",
+        help="Target MCP SDK. 'fastmcp' (default) generates Python/FastMCP. 'mcp-use' generates TypeScript/mcp-use. For Skybridge output use 'mcp-anything build --target skybridge'.",
     )
     gen.add_argument(
         "--include",

@@ -3,8 +3,8 @@
 FROM node:22-slim AS builder
 
 WORKDIR /app
-COPY skybridge/package.json ./
-RUN corepack enable pnpm && pnpm install
+COPY skybridge/package.json skybridge/pnpm-lock.yaml* ./
+RUN corepack enable pnpm && pnpm install --frozen-lockfile
 
 COPY skybridge/ .
 RUN pnpm build

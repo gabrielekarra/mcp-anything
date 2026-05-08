@@ -14,12 +14,12 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
-    "skybridge": "latest",
+    "skybridge": "^0.36.2",
     "@modelcontextprotocol/sdk": "^1.27.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {
-    "@skybridge/devtools": "latest",
+    "@skybridge/devtools": "^0.36.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "@types/react": "^19.0.0",
