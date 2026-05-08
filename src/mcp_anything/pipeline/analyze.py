@@ -399,7 +399,38 @@ class AnalyzePhase(Phase):
 
         # 5. Build result
         if llm_result:
-            result = llm_result
+            # Build static result to check for concrete HTTP routes (method + path).
+            # When a web framework detector found real routes, they carry the http_method
+            # and http_path needed by design.py to emit http_call tools. Preferring the
+            # LLM's semantic capabilities over these would silently lose that wiring.
+            static_result = self._ast_fallback(
+                ctx.manifest.server_name, files, all_mechanisms, ast_results,
+                java_results, flask_fastapi_results, openapi_capabilities,
+                express_results, django_results, go_results,
+                rails_results, rust_web_results,
+                graphql_results, grpc_results, websocket_results,
+                help_capabilities,
+                root=root,
+                zustand_results=zustand_results,
+            )
+            static_http_caps = [
+                c for c in (static_result.capabilities or [])
+                if c.http_method and c.http_path
+            ]
+            if static_http_caps:
+                # Keep static HTTP routes — they preserve concrete method+path for
+                # http_call tool generation. Carry over LLM's richer app description.
+                result = static_result
+                if llm_result.app_description:
+                    result = result.model_copy(
+                        update={"app_description": llm_result.app_description}
+                    )
+                console.print(
+                    f"    [dim]Static HTTP routes preferred over LLM semantic caps "
+                    f"({len(static_http_caps)} routes → http_call)[/dim]"
+                )
+            else:
+                result = llm_result
         else:
             result = self._ast_fallback(
                 ctx.manifest.server_name, files, all_mechanisms, ast_results,

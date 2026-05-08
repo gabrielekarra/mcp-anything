@@ -131,6 +131,30 @@ def build_parser() -> argparse.ArgumentParser:
     bld.add_argument("--ci", action="store_true", help="Hard-fail on coverage below threshold or parity divergence")
     bld.add_argument("--no-llm", action="store_true")
     bld.add_argument("-v", "--verbose", action="store_true")
+    bld.add_argument(
+        "--include",
+        action="append",
+        default=None,
+        help="Glob pattern to include capabilities when data-source is a codebase (repeatable)",
+    )
+    bld.add_argument(
+        "--exclude",
+        action="append",
+        default=None,
+        help="Glob pattern to exclude capabilities when data-source is a codebase (repeatable)",
+    )
+    bld.add_argument(
+        "--scope-file",
+        type=Path,
+        default=None,
+        help="Path to a scope.yaml file for capability curation (codebase mode only)",
+    )
+    bld.add_argument(
+        "--review",
+        action="store_true",
+        default=False,
+        help="Pause after analysis to write scope.yaml for manual editing (codebase mode only)",
+    )
 
     # validate — run conformance checks on an existing generated server
     val = subparsers.add_parser(
@@ -188,6 +212,8 @@ def _run_domain_command(
     phases: Optional[list[str]],
 ) -> None:
     """Handle 'model' and 'build' subcommands (domain pipeline)."""
+    import yaml as _yaml
+
     brief_file = getattr(args, "brief_file", None)
     data_source = getattr(args, "data_source", None)
     name = getattr(args, "name", None)
@@ -198,10 +224,25 @@ def _run_domain_command(
     if not name:
         name = "mcp-server"
 
-    # Use a synthetic codebase_path (domain pipeline doesn't need a real codebase)
-    codebase_path = data_source or Path(".")
-
     output_dir = getattr(args, "output_dir", None) or Path(f"./mcp-{name}-server")
+
+    # Auto-detect codebase: if --data-source is a directory, inject into brief as
+    # data_source_kind="codebase" and route through the legacy analyzer first.
+    domain_brief: Optional[dict] = None
+    codebase_path = data_source or Path(".")
+    if data_source and Path(data_source).is_dir() and brief_file:
+        try:
+            raw = _yaml.safe_load(Path(brief_file).read_text())
+            raw["data_source_kind"] = "codebase"
+            raw["data_source_path"] = str(Path(data_source).resolve())
+            domain_brief = raw
+            codebase_path = Path(data_source).resolve()
+            console.print(
+                f"[dim]Codebase detected at {codebase_path} — "
+                "routing through legacy analyzer before domain pipeline.[/dim]"
+            )
+        except Exception as exc:
+            console.print(f"[yellow]Warning:[/yellow] Could not patch brief for codebase mode: {exc}")
 
     options = CLIOptions(
         codebase_path=Path(codebase_path),
@@ -214,10 +255,14 @@ def _run_domain_command(
         target=getattr(args, "target", "fastmcp"),
         review=getattr(args, "review", False),
         brief_file=Path(brief_file) if brief_file else None,
+        domain_brief=domain_brief,
         auto_approve=getattr(args, "auto_approve", False),
         run_eval=getattr(args, "run_eval", False),
         eval_threshold=getattr(args, "eval_threshold", 0.80),
         ci=getattr(args, "ci", False),
+        include=getattr(args, "include", None),
+        exclude=getattr(args, "exclude", None),
+        scope_file=getattr(args, "scope_file", None),
     )
 
     from mcp_anything.pipeline.engine import PipelineEngine
