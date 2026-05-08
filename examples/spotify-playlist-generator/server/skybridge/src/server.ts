@@ -290,6 +290,7 @@ server.registerTool(
   },
   async (args: any) => {
     const start = Date.now();
+    let status = "ok";
     try {
       const clientId = requireEnv("SPOTIFY_CLIENT_ID");
       const redirectUri = normalizeRedirectUri(args.redirect_uri);
@@ -310,8 +311,11 @@ server.registerTool(
         next_step:
           "Open authorization_url, approve access, copy the callback code, then call exchange_spotify_code with that code.",
       });
+    } catch (err) {
+      status = "error";
+      throw err;
     } finally {
-      recordCall("setup_spotify_oauth", Date.now() - start, "ok");
+      recordCall("setup_spotify_oauth", Date.now() - start, status);
     }
   },
 );
@@ -328,6 +332,7 @@ server.registerTool(
   },
   async (args: any) => {
     const start = Date.now();
+    let status = "ok";
     try {
       const payload = await tokenRequest(new URLSearchParams({
         grant_type: "authorization_code",
@@ -343,8 +348,11 @@ server.registerTool(
         setup:
           "Export SPOTIFY_REFRESH_TOKEN with the refresh_token value so the server can refresh access without storing secrets in files.",
       });
+    } catch (err) {
+      status = "error";
+      throw err;
     } finally {
-      recordCall("exchange_spotify_code", Date.now() - start, "ok");
+      recordCall("exchange_spotify_code", Date.now() - start, status);
     }
   },
 );
@@ -365,6 +373,7 @@ server.registerTool(
   },
   async (args: any) => {
     const start = Date.now();
+    let status = "ok";
     try {
       const durationMinutes = Number(args.duration_minutes);
       const moodVibe = String(args.mood_vibe ?? "").trim();
@@ -412,8 +421,11 @@ server.registerTool(
           : null,
         tracks,
       });
+    } catch (err) {
+      status = "error";
+      throw err;
     } finally {
-      recordCall("generate_spotify_playlist", Date.now() - start, "ok");
+      recordCall("generate_spotify_playlist", Date.now() - start, status);
     }
   },
 );

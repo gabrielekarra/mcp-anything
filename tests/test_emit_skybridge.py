@@ -1,6 +1,7 @@
 """Unit tests for the TypeScript/Skybridge emitter."""
 
 import json
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -89,6 +90,17 @@ def _make_domain_model() -> DomainModel:
 # Helper
 # ---------------------------------------------------------------------------
 
+_TEMP_DIRS: list[Path] = []
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_emitter_tempdirs():
+    """Ensure every directory created by `_run_emitter` is removed after each test."""
+    yield
+    while _TEMP_DIRS:
+        shutil.rmtree(_TEMP_DIRS.pop(), ignore_errors=True)
+
+
 def _run_emitter(
     design: ServerDesign | None = None,
     domain: DomainModel | None = None,
@@ -96,8 +108,9 @@ def _run_emitter(
 ) -> tuple[TypeScriptSkybridgeEmitter, Path]:
     if design is None:
         design = _make_design()
-    # Use mkdtemp so the directory survives the function return for the caller to inspect.
+    # mkdtemp keeps the directory alive past the call; the autouse fixture cleans it up.
     tmp = Path(tempfile.mkdtemp())
+    _TEMP_DIRS.append(tmp)
     out = tmp / "skybridge"
     out.mkdir(parents=True)
     emitter = TypeScriptSkybridgeEmitter(design, domain, out, use_llm=use_llm)

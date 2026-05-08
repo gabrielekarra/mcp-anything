@@ -171,8 +171,9 @@ class ValidationHarnessPhase(Phase):
                         f"{report.threshold:.0%}"
                     )
         else:
-            # Structural-only report: pass if all contract checks pass, eval not gated
-            contracts_ok = all(c.passed for c in contract_checks)
+            # Structural-only report: no live eval ran, so we cannot claim success.
+            # `skipped=True` + `passed=False` makes the unvalidated state unambiguous
+            # to any CI gate that reads `passed`.
             report = ConformanceReport(
                 server_name=design.server_name,
                 backend_target=getattr(ctx.options, "target", "fastmcp"),
@@ -180,7 +181,8 @@ class ValidationHarnessPhase(Phase):
                 threshold=getattr(ctx.options, "eval_threshold", 0.80),
                 contract_checks=contract_checks,
                 eval_run=False,
-                passed=contracts_ok,
+                skipped=True,
+                passed=False,
             )
             report_path = output_dir / "conformance_report.json"
             report_path.write_text(report.model_dump_json(indent=2))

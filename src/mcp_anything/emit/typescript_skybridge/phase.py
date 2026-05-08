@@ -184,24 +184,88 @@ server.run().catch(console.error);
 {input_schema_block}  }},
   async (args: any) => {{
     const start = Date.now();
+    let _status = "ok";
     try {{
 {call_code}
+    }} catch (err) {{
+      _status = "error";
+      throw err;
     }} finally {{
-      recordCall("{tool.name}", Date.now() - start, "ok");
+      recordCall("{tool.name}", Date.now() - start, _status);
     }}
   }}
 );'''
 
     def _render_zod_shape(self, tool: ToolSpec) -> str:
         lines = []
+        has_verbose = False
         for p in tool.parameters:
+            if p.name == "verbose":
+                has_verbose = True
             z_type = self._to_zod_type(p.type)
             if not p.required:
                 z_type = f"{z_type}.optional()"
             lines.append(
                 f"      {json.dumps(p.name)}: {z_type}.describe({json.dumps(p.description)}),"
             )
+        if not has_verbose:
+            # CONTRACT C-10: every tool must accept a verbose flag (compact responses by default).
+            lines.append(
+                '      "verbose": z.boolean().optional()'
+                '.describe("Return full details instead of the compact summary."),'
+            )
         return "\n".join(lines)
+
+    def _render_auth_blocks(self) -> tuple[str, str]:
+        """Return (header_block, query_block) for auth injection in fetch calls.
+
+        Reads design.backend.auth and emits TS that pulls credentials from env vars.
+        Returns ("", "") when no auth is configured.
+        """
+        auth = getattr(self.design.backend, "auth", None) if self.design.backend else None
+        if not auth or not getattr(auth, "auth_type", ""):
+            return "", ""
+        token_var = json.dumps(auth.env_var_token or "")
+        if auth.auth_type == "bearer" and auth.env_var_token:
+            header = (
+                f'      {{\n'
+                f'        const _t = process.env[{token_var}];\n'
+                f'        if (_t) headers["Authorization"] = `Bearer ${{_t}}`;\n'
+                f'      }}\n'
+            )
+            return header, ""
+        if auth.auth_type == "api_key" and auth.env_var_token:
+            if auth.api_key_header:
+                header_name = json.dumps(auth.api_key_header)
+                header = (
+                    f'      {{\n'
+                    f'        const _k = process.env[{token_var}];\n'
+                    f'        if (_k) headers[{header_name}] = _k;\n'
+                    f'      }}\n'
+                )
+                return header, ""
+            if auth.api_key_query:
+                qname = json.dumps(auth.api_key_query)
+                query = (
+                    f'      {{\n'
+                    f'        const _k = process.env[{token_var}];\n'
+                    f'        if (_k) url.searchParams.set({qname}, _k);\n'
+                    f'      }}\n'
+                )
+                return "", query
+        if auth.auth_type == "basic" and (auth.env_var_username or auth.env_var_password):
+            uvar = json.dumps(auth.env_var_username or "")
+            pvar = json.dumps(auth.env_var_password or "")
+            header = (
+                f'      {{\n'
+                f'        const _u = process.env[{uvar}] ?? "";\n'
+                f'        const _p = process.env[{pvar}] ?? "";\n'
+                f'        if (_u || _p) headers["Authorization"] = '
+                f'`Basic ${{Buffer.from(`${{_u}}:${{_p}}`).toString("base64")}}`;\n'
+                f'      }}\n'
+            )
+            return header, ""
+        return "", ""
 
     def _to_zod_type(self, t: str) -> str:
         return {
@@ -234,6 +298,7 @@ server.run().catch(console.error);
                     "apiName": mapping.get("api_name") or getattr(p, "api_name", "") or p.name,
                 }
             param_meta_json = json.dumps(param_meta)
+            auth_header_block, auth_query_block = self._render_auth_blocks()
             return f'''      const baseUrl = process.env["{base_url_env}"] ?? "http://localhost:8000";
       const url = new URL(`${{baseUrl}}{path}`);
       const bodyFields: Record<string, unknown> = {{}};
@@ -252,10 +317,12 @@ server.run().catch(console.error);
       for (const [k, v] of Object.entries({constants})) {{
         url.searchParams.set(k, String(v));
       }}
-      const hasBody = Object.keys(bodyFields).length > 0;
-      const resp = await fetch(url.toString(), {{
+{auth_query_block}      const hasBody = Object.keys(bodyFields).length > 0;
+      const headers: Record<string, string> = {{}};
+      if (hasBody) headers["Content-Type"] = "application/json";
+{auth_header_block}      const resp = await fetch(url.toString(), {{
         method: "{method}",
-        headers: hasBody ? {{ "Content-Type": "application/json" }} : undefined,
+        headers,
         body: hasBody ? JSON.stringify(bodyFields) : undefined,
       }});
       if (!resp.ok) throw new Error(`HTTP ${{resp.status}}: ${{await resp.text()}}`);
@@ -340,13 +407,17 @@ server.run().catch(console.error);
                 tsx = call_llm_for_text(prompt)
                 # Strip accidental markdown code fences
                 if tsx.startswith("```"):
-                    lines = tsx.splitlines()
+                    raw_lines = tsx.splitlines()
                     tsx = "\n".join(
-                        l for l in lines if not l.startswith("```")
+                        line for line in raw_lines if not line.startswith("```")
                     ).strip()
                 return tsx
-            except Exception:
-                pass
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "LLM view generation failed for %s, falling back to placeholder: %s",
+                    tool.name, exc,
+                )
         return self._placeholder_view(tool)
 
     def _placeholder_view(self, tool: ToolSpec) -> str:
@@ -494,7 +565,7 @@ export default defineConfig({
     def _emit_dockerfile(self) -> None:
         content = f'''# Generated Dockerfile for {self.design.server_name} (Skybridge)
 # CONTRACT C-17, C-18: no embedded secrets; reads API keys from environment at runtime.
-# Requires Node.js 24+ as per Skybridge SDK requirements.
+# Requires Node.js 22.12+ (Vite 7 minimum).
 FROM node:22-slim AS builder
 
 WORKDIR /app
@@ -506,34 +577,42 @@ RUN pnpm build
 
 FROM node:22-slim
 WORKDIR /app
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY package*.json ./
+COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node package*.json ./
 
 EXPOSE 8000
 ENV MCP_TRANSPORT=http
 
+USER node
 CMD ["node", "dist/server.js"]
 '''
         self._write("Dockerfile", content)
 
     def _emit_package_json(self) -> None:
+        has_protocol_call = any(
+            t.impl.strategy == "protocol_call" for t in self.design.tools
+        )
+        dependencies = {
+            "skybridge": "latest",
+            "@modelcontextprotocol/sdk": "^1.27.0",
+            "zod": "^3.25.0",
+        }
+        if has_protocol_call:
+            # CONTRACT: protocol_call tools require a WebSocket client.
+            dependencies["ws"] = "^8.18.0"
         pkg = {
             "name": self.design.server_name,
             "version": "1.0.0",
             "description": self.design.server_description[:80],
             "type": "module",
-            "engines": {"node": ">=22.0.0", "pnpm": ">=10.0.0"},
+            "engines": {"node": ">=22.12.0", "pnpm": ">=10.0.0"},
             "scripts": {
                 "dev": 'nodemon --exec "tsx src/server.ts" --watch src --ext ts,tsx',
                 "build": "vite build",
                 "start": "node dist/server.js",
             },
-            "dependencies": {
-                "skybridge": "latest",
-                "@modelcontextprotocol/sdk": "^1.27.0",
-                "zod": "^3.22.0",
-            },
+            "dependencies": dependencies,
             "devDependencies": {
                 "@skybridge/devtools": "latest",
                 "react": "^19.0.0",
@@ -547,6 +626,8 @@ CMD ["node", "dist/server.js"]
                 "tsx": "^4.0.0",
             },
         }
+        if has_protocol_call:
+            pkg["devDependencies"]["@types/ws"] = "^8.5.10"
         self._write("package.json", json.dumps(pkg, indent=2))
 
     def _emit_tsconfig(self) -> None:
@@ -586,7 +667,7 @@ Runs as both an **MCP server** (Claude, Cursor, Goose, VSCode) and a **ChatGPT A
 
 ## Requirements
 
-- Node.js 22+
+- Node.js 22.12+ (Vite 7 minimum)
 - pnpm 10+
 
 ## Quick start

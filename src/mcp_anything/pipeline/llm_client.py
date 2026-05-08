@@ -88,7 +88,10 @@ def call_llm_for_text(
 ) -> str:
     """Call the Claude API and return the raw text response.
 
+    Retries up to _MAX_RETRIES times on transient failures or empty responses.
+
     Raises ImportError if anthropic is not installed.
+    Raises RuntimeError if all retries are exhausted.
     """
     import anthropic
 
@@ -101,5 +104,18 @@ def call_llm_for_text(
     if system:
         kwargs["system"] = system
 
-    response = client.messages.create(**kwargs)
-    return response.content[0].text.strip()
+    last_error: Optional[str] = None
+    for _ in range(_MAX_RETRIES):
+        try:
+            response = client.messages.create(**kwargs)
+            text = response.content[0].text.strip() if response.content else ""
+            if text:
+                return text
+            last_error = "Empty text response from LLM"
+        except Exception as exc:  # noqa: BLE001 — surface to caller after retries
+            last_error = f"{type(exc).__name__}: {exc}"
+
+    raise RuntimeError(
+        f"LLM did not return usable text after {_MAX_RETRIES} attempts. "
+        f"Last error: {last_error}"
+    )

@@ -4,7 +4,7 @@
   "description": "A Spotify playlist generator that turns a user's target duration and mood or vib",
   "type": "module",
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=22.12.0",
     "pnpm": ">=10.0.0"
   },
   "scripts": {
@@ -16,7 +16,7 @@
   "dependencies": {
     "skybridge": "latest",
     "@modelcontextprotocol/sdk": "^1.27.0",
-    "zod": "^3.22.0"
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@skybridge/devtools": "latest",

@@ -41,7 +41,7 @@ def build_view_prompt(
 
 ## Requirements
 1. Use ONLY these Skybridge imports from `"skybridge/web"`: `useCallTool`, `useViewState`, `useLayout`, `useDisplayMode`, `mountView`. **Do NOT use `useToolInfo`**.
-2. The component must handle all four states: `"idle"`, `"loading"`, `"error"`, and the success state.
+2. The component must handle all four states: `"idle"`, `"pending"`, `"error"`, and the `"success"` state.
 3. Show relevant tool parameters and context in the idle state.
 4. Display the result in a clear, human-readable way appropriate to the domain.
 5. Use inline styles only (no external CSS libraries).

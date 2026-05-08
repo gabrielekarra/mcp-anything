@@ -6,13 +6,17 @@ type ExchangeCodeArgs = {
   redirect_uri?: string;
 };
 
+function safeParse(raw: string): any {
+  try { return JSON.parse(raw); } catch { return raw; }
+}
+
 function parseData(data: unknown): any {
   if (!data) return null;
   if (typeof data === "object" && "result" in data && typeof (data as any).result === "string") {
-    return JSON.parse((data as any).result);
+    return safeParse((data as any).result);
   }
   if (typeof data === "object" && "content" in data && typeof (data as any).content === "string") {
-    return JSON.parse((data as any).content);
+    return safeParse((data as any).content);
   }
   if (
     typeof data === "object" &&
@@ -20,10 +24,10 @@ function parseData(data: unknown): any {
     Array.isArray((data as any).content) &&
     typeof (data as any).content[0]?.text === "string"
   ) {
-    return JSON.parse((data as any).content[0].text);
+    return safeParse((data as any).content[0].text);
   }
   if (typeof data === "string") {
-    return JSON.parse(data);
+    return safeParse(data);
   }
   return data;
 }

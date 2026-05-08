@@ -11,9 +11,10 @@ RUN pnpm build
 
 FROM node:22-slim
 WORKDIR /app
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
+COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/package*.json ./
 
 ENV MCP_TRANSPORT=stdio
+USER node
 CMD ["node", "dist/server.js"]
