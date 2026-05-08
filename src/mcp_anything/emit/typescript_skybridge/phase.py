@@ -609,6 +609,7 @@ CMD ["node", "dist/server.js"]
             "engines": {"node": ">=22.12.0", "pnpm": ">=10.0.0"},
             "scripts": {
                 "dev": 'nodemon --exec "tsx src/server.ts" --watch src --ext ts,tsx',
+                "dev:ui": "vite",
                 "build": "vite build",
                 "start": "node dist/server.js",
             },
@@ -674,7 +675,8 @@ Runs as both an **MCP server** (Claude, Cursor, Goose, VSCode) and a **ChatGPT A
 
 ```bash
 pnpm install
-pnpm dev      # Starts MCP server with hot-reload (nodemon + tsx)
+pnpm dev       # MCP server with hot-reload (nodemon + tsx)
+pnpm dev:ui    # Vite dev server — opens the Skybridge tool UI at http://localhost:5173
 ```
 
 ## Build & deploy
