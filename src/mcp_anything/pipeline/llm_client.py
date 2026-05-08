@@ -110,6 +110,11 @@ def call_llm_for_text(
             response = client.messages.create(**kwargs)
             text = response.content[0].text.strip() if response.content else ""
             if text:
+                if getattr(response, "stop_reason", None) == "max_tokens":
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "LLM response hit max_tokens (%d) — output may be truncated.", max_tokens
+                    )
                 return text
             last_error = "Empty text response from LLM"
         except Exception as exc:  # noqa: BLE001 — surface to caller after retries

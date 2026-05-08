@@ -180,6 +180,7 @@ server.run().catch(console.error);
         return f'''server.registerTool(
   {{
     name: "{tool.name}",
+    view: {{ component: "{tool.name}" as any }},
     description: `{tool.description}`,
 {input_schema_block}  }},
   async (args: any) => {{
@@ -293,9 +294,14 @@ server.run().catch(console.error);
                 style = mapping.get("style") or getattr(p, "location", "") or "query"
                 if style not in {"path", "body", "query"}:
                     style = "query"
+                api_name = mapping.get("api_name") or getattr(p, "api_name", "") or p.name
+                # Auto-detect path params: if {api_name} or {p.name} appears in the URL
+                # template, the param must be style="path" regardless of what arg_mapping says.
+                if f"{{{api_name}}}" in path or f"{{{p.name}}}" in path:
+                    style = "path"
                 param_meta[p.name] = {
                     "style": style,
-                    "apiName": mapping.get("api_name") or getattr(p, "api_name", "") or p.name,
+                    "apiName": api_name,
                 }
             param_meta_json = json.dumps(param_meta)
             auth_header_block, auth_query_block = self._render_auth_blocks()
@@ -404,7 +410,7 @@ server.run().catch(console.error);
                     use_cases=use_cases,
                     glossary=glossary,
                 )
-                tsx = call_llm_for_text(prompt)
+                tsx = call_llm_for_text(prompt, max_tokens=16000)
                 # Strip accidental markdown code fences
                 if tsx.startswith("```"):
                     raw_lines = tsx.splitlines()
@@ -537,6 +543,9 @@ import { skybridge } from "skybridge/vite";
 
 export default defineConfig({
   plugins: [skybridge()],
+  optimizeDeps: {
+    exclude: ["fsevents"],
+  },
 });
 '''
         self._write("vite.config.ts", content)
@@ -608,10 +617,9 @@ CMD ["node", "dist/server.js"]
             "type": "module",
             "engines": {"node": ">=22.12.0", "pnpm": ">=10.0.0"},
             "scripts": {
-                "dev": 'nodemon --exec "tsx src/server.ts" --watch src --ext ts,tsx',
-                "dev:ui": "vite",
-                "build": "vite build",
-                "start": "node dist/server.js",
+                "dev": "skybridge dev",
+                "build": "skybridge build",
+                "start": "skybridge start",
             },
             "dependencies": dependencies,
             "devDependencies": {
@@ -623,8 +631,7 @@ CMD ["node", "dist/server.js"]
                 "@types/node": "^22.0.0",
                 "typescript": "^5.3.0",
                 "vite": "^7.3.1",
-                "nodemon": "^3.0.0",
-                "tsx": "^4.0.0",
+                "tsx": "^4.19.2",
             },
         }
         if has_protocol_call:
@@ -675,15 +682,14 @@ Runs as both an **MCP server** (Claude, Cursor, Goose, VSCode) and a **ChatGPT A
 
 ```bash
 pnpm install
-pnpm dev       # MCP server with hot-reload (nodemon + tsx)
-pnpm dev:ui    # Vite dev server — opens the Skybridge tool UI at http://localhost:5173
+pnpm dev       # starts MCP server + Skybridge dev emulator (http://localhost:3000)
 ```
 
 ## Build & deploy
 
 ```bash
 pnpm build
-node dist/server.js
+pnpm start
 ```
 
 ## Connect as MCP client

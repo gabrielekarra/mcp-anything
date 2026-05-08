@@ -45,13 +45,15 @@ def build_view_prompt(
 3. Show relevant tool parameters and context in the idle state.
 4. Display the result in a clear, human-readable way appropriate to the domain.
 5. Use inline styles only (no external CSS libraries).
-6. Do NOT import React explicitly — Skybridge's Vite plugin handles the JSX transform.
-7. `useCallTool` must receive the tool name as a string argument: `useCallTool("{tool_name}")`. It returns `{{ status, data, error, callTool }}`. States are `"idle"`, `"pending"`, `"success"`, `"error"` — NOT "loading". `data` is typed `unknown` — always assign it to a variable typed `any` before use: `const result: any = data`.
+6. Do NOT import React explicitly — Skybridge's Vite plugin handles the JSX transform. You may import specific React types or hooks: `import {{ useState, useMemo }} from "react";` or `import type {{ CSSProperties }} from "react";`.
+7. `useCallTool` signature: `useCallTool<TArgs, TResponse>(name: string)`. It returns `{{ status, data, error, callTool }}`. States are `"idle"`, `"pending"`, `"success"`, `"error"`. `callTool(args)` takes the args object directly — do NOT pass a side-effects object as the second argument unless you need callbacks. `data` is typed `unknown` — always assign it: `const result: any = data`.
 8. Call `mountView(<ComponentName />)` as the last statement (JSX element, not the function).
 9. Add `export default ComponentName;` before the `mountView` call.
 10. Name the component `{_to_pascal(tool_name)}View`.
 11. `useLayout()` takes **zero arguments** — do NOT pass a config object to it.
-12. `useDisplayMode()` returns a **tuple** `[displayMode, setDisplayMode]` — always destructure it: `const [displayMode] = useDisplayMode();`. Then compare `displayMode` as a string (e.g. `displayMode === "compact"`).
+12. `useDisplayMode()` returns `[displayMode, setDisplayMode]` where `displayMode` is `"pip" | "inline" | "fullscreen" | "modal"`. **NEVER compare it to `"compact"`** — that value does not exist.
+13. `useViewState` signature: `useViewState<T extends object>(defaultState: T)` — it takes **one argument, an object**. Example: `const [state, setState] = useViewState({{ query: "", page: 1 }})`. Access fields as `state.query`. **NEVER call it as `useViewState<string>("key", "default")` — that is wrong.**
+14. Only use standard HTML/SVG JSX elements (`div`, `span`, `button`, `input`, `svg`, `path`, etc.). Do NOT invent custom element names like `<triangle>` or `<card>`.
 
 ## Output
 Return ONLY the complete `.tsx` file contents — no markdown fences, no explanation.
