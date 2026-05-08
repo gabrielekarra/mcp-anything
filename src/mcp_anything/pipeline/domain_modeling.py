@@ -98,7 +98,7 @@ def _summarize_openapi(spec: dict) -> str:
 
 def _summarize_analysis(analysis) -> str:  # analysis: AnalysisResult
     """Produce a token-efficient summary of a legacy AnalysisResult for the domain LLM."""
-    langs = ", ".join(str(l) for l in (analysis.languages or []))
+    langs = ", ".join(str(lang) for lang in (analysis.languages or []))
     caps = analysis.capabilities or []
     lines = [
         f"App: {analysis.app_name} ({langs})",

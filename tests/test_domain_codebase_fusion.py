@@ -207,10 +207,10 @@ class TestIsActionableSeedTool:
         t = self._tool("stub")
         assert ToolDesignPhase._is_actionable_seed_tool(t) is False
 
-    def test_stubs_filtered_from_reshape_prompt(self):
+    def test_stubs_filtered_from_reshape_prompt(self, tmp_path):
         """Non-actionable protocol_call stubs are removed before the LLM sees the seed."""
         options = _make_options(no_llm=True)
-        manifest = GenerationManifest(codebase_path=".", output_dir="/tmp/t", server_name="x")
+        manifest = GenerationManifest(codebase_path=".", output_dir=str(tmp_path), server_name="x")
         ctx = PipelineContext(options, manifest, MagicMock())
         # 2 actionable + 1 stub
         tools = [
@@ -231,9 +231,10 @@ class TestIsActionableSeedTool:
 
 class TestReshapeTools:
     def _make_ctx(self, no_llm=True):
+        import tempfile
         manifest = GenerationManifest(
             codebase_path=".",
-            output_dir="/tmp/test-output",
+            output_dir=tempfile.mkdtemp(prefix="mcp_test_"),
             server_name="my-app",
         )
         options = _make_options(no_llm=no_llm)
@@ -452,7 +453,9 @@ class TestNoLLMCodebaseFusion:
         # All tools should have concrete strategies (not stub), since Flask detector
         # produces http_call tools
         strategies = {t.impl.strategy for t in design.tools}
-        assert "http_call" in strategies or "stub" not in strategies or len(strategies) > 0
+        assert "stub" not in strategies, (
+            f"Expected no stub tools when Flask routes are detected, got: {strategies}"
+        )
 
     def test_completed_phases_include_analyze_and_design(self, tmp_path):
         codebase = FIXTURES / "fake_flask_app"
