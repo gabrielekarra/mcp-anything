@@ -210,11 +210,14 @@ def _build_tool_impl(cap: Capability, ipc_type: Optional[IPCType]) -> ToolImpl:
                 arg_mapping=arg_mapping,
             )
         elif ipc_type == IPCType.CLI:
-            # Wrap as CLI call — invoke the entry point with subcommand-style args
+            module_path = cap.source_file.replace("/", ".").removesuffix(".py")
             return ToolImpl(
                 strategy="cli_function",
                 cli_entry=cap.source_file,
                 python_function=cap.source_function,
+                python_module=module_path,
+                python_import_path=cap.source_file,
+                python_class=cap.source_class,
                 arg_mapping=arg_mapping,
             )
         elif ipc_type in (IPCType.PROTOCOL, IPCType.SOCKET):

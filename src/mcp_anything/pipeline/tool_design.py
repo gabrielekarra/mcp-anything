@@ -190,6 +190,102 @@ Return a JSON object with:
 """
 
 
+_TOOL_RESHAPE_RULES = """\
+You are reshaping an existing set of MCP tools to match a domain brief. You have authority to:
+
+1. DROP tools that are not justified by any use case in the domain brief.
+2. GROUP tools: if ≥3 tools perform CRUD operations on the same resource, collapse them into ONE
+   tool named manage_<resource>(operation: "list"|"create"|"update"|"delete"|...). Use the name
+   of the most common seed tool as the grouped tool's seed_name.
+3. RENAME tools: use domain vocabulary from the glossary. Snake_case only.
+4. SET disclosure_level: "default" for everyday tools, "verbose" for admin/power tools.
+5. REWRITE descriptions: agent-consumer voice, ≥20 chars, action-oriented, max 2 sentences.
+6. SET compact_fields: 3-7 most useful response fields.
+7. ADD composed_tools: multi-step workflows from use cases that require ≥3 sequential calls.
+
+You MUST NOT:
+- Invent tools that do not correspond to a seed tool by name.
+- Alter impl details (strategies, paths, methods, modules, RPC names) — they are authoritative.
+- Reference implementation internals in descriptions ("calls GET /foo").
+- Output a seed_name that was not in the input seed tool list.
+
+If a use case requires a tool not in the seed list, omit it — do not invent it.
+Return ONLY valid JSON, no markdown.
+"""
+
+
+def _build_reshape_prompt(domain_model: DomainModel, seed_tools: list) -> str:
+    """Build the LLM prompt for reshape mode."""
+    use_cases_text = "\n".join(
+        f"  {uc.id}: {uc.description}"
+        for uc in domain_model.use_cases
+    )
+    glossary_text = "\n".join(
+        f"  - {g.term}: {g.definition}"
+        for g in domain_model.glossary
+    )
+
+    seed_lines = []
+    for t in seed_tools:
+        param_names = ", ".join(
+            f"{p.name}:{p.type}" for p in t.parameters if p.name != "verbose"
+        )
+        seed_lines.append(
+            f'  - name="{t.name}" strategy={t.impl.strategy} '
+            f'params=[{param_names}] desc="{t.description[:80]}"'
+        )
+    seed_text = "\n".join(seed_lines)
+
+    return f"""## Domain Brief
+
+Server: {domain_model.server_name}
+{domain_model.domain_description}
+
+### Use Cases
+{use_cases_text}
+
+### Glossary
+{glossary_text}
+
+## Seed Tools ({len(seed_tools)} tools from legacy analyzer)
+{seed_text}
+
+## Output Format
+
+Return a JSON object:
+{{
+  "kept_tools": [
+    {{
+      "seed_name": "<exact name from seed list>",
+      "new_name": "<snake_case — same as seed_name if no rename needed>",
+      "group": "<group name or null>",
+      "disclosure_level": "default",
+      "description": "<agent-consumer voice, ≥20 chars>",
+      "compact_fields": ["field1", "field2", "field3"]
+    }}
+  ],
+  "tool_groups": [
+    {{
+      "name": "<group_name>",
+      "description": "<what this group covers>",
+      "operations": ["list", "create"],
+      "disclosure_level": "default"
+    }}
+  ],
+  "composed_tools": [
+    {{
+      "name": "<snake_case_name>",
+      "description": "<agent-consumer voice>",
+      "steps": ["tool_name_1", "tool_name_2"],
+      "trigger_pattern": "<when an agent should prefer this>"
+    }}
+  ],
+  "dropped_tools": ["seed_name_1", "seed_name_2"],
+  "drop_reasons": {{"seed_name_1": "not covered by any use case"}}
+}}
+"""
+
+
 _DOCSTRING_REWRITE_SYSTEM = """\
 You are rewriting MCP tool descriptions for agent consumers. Rules:
 
@@ -331,6 +427,9 @@ class ToolDesignPhase(Phase):
         if ctx.options.resume and ctx.manifest.tool_spec:
             design = ServerDesign.model_validate(ctx.manifest.tool_spec)
             ctx.console.print("[green]Loaded existing tool spec.[/green]")
+        elif ctx.manifest.design and ctx.manifest.design.tools:
+            # Codebase mode: reshape the legacy seed design using the domain brief
+            design = self._reshape_tools(domain_model, ctx.manifest.design, ctx)
         else:
             design = self._design_tools(domain_model, ctx)
 
@@ -338,7 +437,7 @@ class ToolDesignPhase(Phase):
         tool_spec_path = ctx.output_dir / "tool_spec.yaml"
         ctx.output_dir.mkdir(parents=True, exist_ok=True)
         tool_spec_path.write_text(
-            yaml.dump(design.model_dump(), allow_unicode=True, sort_keys=False)
+            yaml.dump(design.model_dump(mode="json"), allow_unicode=True, sort_keys=False)
         )
         ctx.console.print(f"[green]Tool spec written to {tool_spec_path}[/green]")
 
@@ -349,9 +448,131 @@ class ToolDesignPhase(Phase):
             yaml.dump(descriptions_data, allow_unicode=True, sort_keys=False)
         )
 
-        ctx.manifest.tool_spec = design.model_dump()
+        ctx.manifest.tool_spec = design.model_dump(mode="json")
         ctx.manifest.design = design  # keep legacy field populated for emitter compatibility
         ctx.save_manifest()
+
+    @staticmethod
+    def _is_actionable_seed_tool(tool: "ToolSpec") -> bool:
+        """Return True only for tools with a concrete, callable implementation."""
+        impl = tool.impl
+        if impl.strategy == "http_call":
+            return bool(impl.http_method and impl.http_path)
+        if impl.strategy in ("python_call", "cli_function"):
+            return bool(impl.python_module and impl.python_function)
+        if impl.strategy == "cli_subcommand":
+            return True
+        if impl.strategy == "protocol_call":
+            # Only gRPC stubs are meaningful protocol_call tools
+            return bool(impl.grpc_service)
+        return False
+
+    def _reshape_tools(
+        self, domain_model: DomainModel, seed_design: ServerDesign, ctx: PipelineContext
+    ) -> ServerDesign:
+        """Reshape a legacy seed ServerDesign using the domain brief (codebase mode)."""
+        all_seed_tools = seed_design.tools
+        # Drop internal helper stubs that can't be called as MCP tools
+        seed_tools = [t for t in all_seed_tools if self._is_actionable_seed_tool(t)]
+        dropped_stubs = len(all_seed_tools) - len(seed_tools)
+        if dropped_stubs:
+            ctx.console.print(
+                f"  [dim]Pre-filtered {dropped_stubs} non-actionable stub(s) from seed.[/dim]"
+            )
+        seed_by_name = {t.name: t for t in seed_tools}
+
+        if ctx.options.no_llm:
+            ctx.console.print("[dim]--no-llm: skipping reshape, using seed design directly.[/dim]")
+            return seed_design.model_copy(update={"tools": seed_tools})
+
+        try:
+            from mcp_anything.pipeline.llm_client import call_llm_for_json
+        except ImportError:
+            ctx.console.print("[yellow]anthropic not installed; using seed design directly.[/yellow]")
+            return seed_design.model_copy(update={"tools": seed_tools})
+
+        ctx.console.print(
+            f"[dim]Reshaping {len(seed_tools)} seed tools using domain brief...[/dim]"
+        )
+        prompt = _build_reshape_prompt(domain_model, seed_tools)
+
+        try:
+            data = call_llm_for_json(prompt, system=_TOOL_RESHAPE_RULES)
+        except Exception as exc:
+            ctx.console.print(f"[yellow]Reshape LLM call failed ({exc}); using seed design.[/yellow]")
+            return seed_design.model_copy(update={"tools": seed_tools})
+
+        kept_entries = data.get("kept_tools", [])
+        if not kept_entries:
+            ctx.console.print("[yellow]Reshape returned no kept tools; using seed design.[/yellow]")
+            return seed_design.model_copy(update={"tools": seed_tools})
+
+        kept_tools: list[ToolSpec] = []
+        invalid = 0
+        for entry in kept_entries:
+            sname = entry.get("seed_name", "")
+            seed_tool = seed_by_name.get(sname)
+            if seed_tool is None:
+                invalid += 1
+                continue  # LLM hallucinated a seed name — reject silently
+
+            new_name = entry.get("new_name") or sname
+            description = entry.get("description") or seed_tool.description
+            if len(description) < 20:
+                description = seed_tool.description
+
+            kept_tools.append(seed_tool.model_copy(update={
+                "name": new_name,
+                "description": description,
+                # impl and parameters preserved from seed — do NOT take from LLM output
+            }))
+
+        if invalid:
+            ctx.console.print(
+                f"[yellow]Reshape:[/yellow] {invalid} LLM tool reference(s) not in seed — ignored."
+            )
+
+        if not kept_tools:
+            ctx.console.print("[yellow]All reshape entries invalid; using seed design.[/yellow]")
+            return seed_design.model_copy(update={"tools": seed_tools})
+
+        dropped = data.get("dropped_tools", [])
+        if dropped:
+            ctx.console.print(
+                f"  [dim]Dropped {len(dropped)} tool(s) not justified by brief: "
+                f"{', '.join(str(d) for d in dropped[:5])}"
+                f"{'...' if len(dropped) > 5 else ''}[/dim]"
+            )
+        ctx.console.print(f"  [green]Kept {len(kept_tools)} tool(s) after reshape.[/green]")
+
+        tool_groups = [
+            ToolGroup(
+                name=g["name"],
+                description=g.get("description", ""),
+                operations=g.get("operations", []),
+                disclosure_level=g.get("disclosure_level", "default"),
+            )
+            for g in data.get("tool_groups", [])
+            if isinstance(g, dict) and "name" in g
+        ]
+        composed_tools = [
+            ComposedTool(
+                name=c["name"],
+                description=c.get("description", ""),
+                steps=c.get("steps", []),
+                trigger_pattern=c.get("trigger_pattern", ""),
+            )
+            for c in data.get("composed_tools", [])
+            if isinstance(c, dict) and "name" in c
+        ]
+
+        return seed_design.model_copy(update={
+            "tools": kept_tools,
+            "tool_groups": tool_groups,
+            "composed_tools": composed_tools,
+            "server_name": domain_model.server_name,
+            "server_description": domain_model.domain_description,
+        })
 
     def _design_tools(self, domain_model: DomainModel, ctx: PipelineContext) -> ServerDesign:
         if ctx.options.no_llm:

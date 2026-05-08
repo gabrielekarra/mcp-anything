@@ -391,6 +391,37 @@ async def {tool.name}({params_sig}) -> Any:
         return {{"stdout": stdout.decode("utf-8", errors="replace"), "stderr": stderr.decode("utf-8", errors="replace"), "returncode": proc.returncode}}
     return _compact({{"output": output, "returncode": proc.returncode}})'''
 
+        if impl.strategy == "cli_function" and impl.python_module and impl.python_function:
+            if impl.python_class:
+                init_param_names = [p.name for p in impl.python_init_params] if impl.python_init_params else []
+                init_filter = f"{init_param_names!r}"
+                return f'''    import importlib
+    mod = importlib.import_module("{impl.python_module}")
+    cls = getattr(mod, "{impl.python_class}")
+    _init_keys = {init_filter}
+    init_args = {{k: v for k, v in params.items() if k in _init_keys and v is not None}}
+    method_args = {{k: v for k, v in params.items() if k not in _init_keys and v is not None}}
+    instance = cls(**init_args)
+    method = getattr(instance, "{impl.python_function}")
+    result = method(**method_args)
+    import inspect
+    if inspect.isawaitable(result):
+        result = await result
+    if verbose:
+        return {{"data": result, "_meta": {{"module": "{impl.python_module}", "class": "{impl.python_class}", "method": "{impl.python_function}"}}}}
+    return _compact(result)'''
+            return f'''    import importlib
+    mod = importlib.import_module("{impl.python_module}")
+    fn = getattr(mod, "{impl.python_function}")
+    call_args = {{k: v for k, v in params.items() if v is not None}}
+    result = fn(**call_args)
+    import inspect
+    if inspect.isawaitable(result):
+        result = await result
+    if verbose:
+        return {{"data": result, "_meta": {{"module": "{impl.python_module}", "function": "{impl.python_function}"}}}}
+    return _compact(result)'''
+
         if impl.strategy == "python_call" and impl.python_module and impl.python_function:
             if impl.python_class:
                 init_param_names = [p.name for p in impl.python_init_params] if impl.python_init_params else []

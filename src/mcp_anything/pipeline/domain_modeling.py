@@ -96,7 +96,38 @@ def _summarize_openapi(spec: dict) -> str:
     return "\n".join(lines)
 
 
-def _load_data_source_summary(brief: DomainBrief) -> Optional[str]:
+def _summarize_analysis(analysis) -> str:  # analysis: AnalysisResult
+    """Produce a token-efficient summary of a legacy AnalysisResult for the domain LLM."""
+    langs = ", ".join(str(lang) for lang in (analysis.languages or []))
+    caps = analysis.capabilities or []
+    lines = [
+        f"App: {analysis.app_name} ({langs})",
+        f"Capabilities ({len(caps)} detected):",
+    ]
+    for cap in caps[:80]:
+        cat = getattr(cap, "category", "general")
+        method = getattr(cap, "http_method", "") or ""
+        path = getattr(cap, "http_path", "") or ""
+        if method and path:
+            lines.append(f"  [{cat}]  {method} {path} — {cap.name}")
+        else:
+            param_names = ", ".join(
+                p.name for p in (getattr(cap, "parameters", None) or [])[:4]
+            )
+            suffix = f"({param_names})" if param_names else ""
+            lines.append(f"  [{cat}]  {cap.name} {suffix}")
+    summary = "\n".join(lines)
+    # Cap at 6000 chars to stay within the prompt budget
+    return summary[:6000]
+
+
+def _load_data_source_summary(brief: DomainBrief, ctx=None) -> Optional[str]:
+    # Codebase mode: analysis already in manifest — summarize it directly
+    if brief.data_source_kind == "codebase":
+        if ctx is not None and ctx.manifest.analysis:
+            return _summarize_analysis(ctx.manifest.analysis)
+        return None
+
     if not brief.data_source_path:
         return None
     path = Path(brief.data_source_path)
@@ -216,7 +247,7 @@ class DomainModelingPhase(Phase):
             return _deterministic_domain_model(brief)
 
         ctx.console.print("[dim]Calling LLM for domain modeling...[/dim]")
-        data_summary = _load_data_source_summary(brief)
+        data_summary = _load_data_source_summary(brief, ctx)
         prompt = _build_domain_prompt(brief, data_summary)
 
         try:

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import yaml
 from rich.console import Console
 
 from mcp_anything.config import CLIOptions
@@ -14,6 +15,7 @@ from mcp_anything.pipeline.scope import apply_scope, write_scope_file
 
 ALL_PHASES = ["analyze", "design", "implement", "document", "package"]
 DOMAIN_PHASES = ["domain_modeling", "tool_design", "emit", "skill_bundle", "validation_harness"]
+CODEBASE_PREFIX = ["analyze", "design"]  # prepended to DOMAIN_PHASES for codebase sources
 
 
 def _load_phases(names: list[str], target: str = "fastmcp") -> list[Phase]:
@@ -105,7 +107,6 @@ class PipelineEngine:
         brief_file = getattr(self.options, "brief_file", None)
         if brief_file:
             try:
-                import yaml
                 raw = yaml.safe_load(Path(brief_file).read_text())
                 name = raw.get("server_name", "")
                 if name:
@@ -114,12 +115,55 @@ class PipelineEngine:
                 pass
         return self.options.resolved_name()
 
+    def _peek_brief_kind(self) -> str:
+        """Return data_source_kind from the in-memory or file brief (default 'other')."""
+        domain_brief = getattr(self.options, "domain_brief", None)
+        if domain_brief and isinstance(domain_brief, dict):
+            return domain_brief.get("data_source_kind", "other")
+        brief_file = getattr(self.options, "brief_file", None)
+        if brief_file:
+            try:
+                raw = yaml.safe_load(Path(brief_file).read_text())
+                return raw.get("data_source_kind", "other")
+            except Exception:
+                pass
+        return "other"
+
+    def _post_analyze_hook(self, manifest: GenerationManifest, ctx: PipelineContext) -> bool:
+        """Apply scope filtering after the analyze phase. Returns True if engine should stop."""
+        scope_path = Path(manifest.output_dir) / "scope.yaml"
+
+        if self.options.review:
+            write_scope_file(manifest.analysis, scope_path)
+            self.console.print()
+            self.console.print(
+                f"[bold yellow]Review mode:[/bold yellow] scope file written to "
+                f"[cyan]{scope_path}[/cyan]"
+            )
+            self.console.print("  Edit the file to enable/disable capabilities, then run:")
+            if manifest.pipeline_mode == "domain":
+                brief_file = getattr(self.options, "brief_file", "<brief.yaml>")
+                self.console.print(
+                    f"  [bold]mcp-anything build --brief {brief_file} "
+                    f"--data-source {manifest.codebase_path} --resume[/bold]"
+                )
+            else:
+                self.console.print(
+                    f"  [bold]mcp-anything generate {manifest.codebase_path} --resume[/bold]"
+                )
+            return True
+
+        self._apply_scope_filtering(manifest, ctx)
+        return False
+
     async def run_domain(self) -> None:
-        """Run the domain-modeling pipeline (Phases 1-5)."""
+        """Run the domain-modeling pipeline (Phases 1-5), optionally prefixed by legacy ANALYZE+DESIGN."""
         manifest = self._init_manifest(pipeline_mode="domain")
         ctx = PipelineContext(self.options, manifest, self.console)
 
-        phase_names = self.options.phases or DOMAIN_PHASES
+        is_codebase = self._peek_brief_kind() == "codebase"
+        default_phases = (CODEBASE_PREFIX + DOMAIN_PHASES) if is_codebase else DOMAIN_PHASES
+        phase_names = self.options.phases or default_phases
         phases = _load_phases(phase_names, target=getattr(self.options, "target", "fastmcp"))
 
         display_name = self._peek_brief_name()
@@ -129,6 +173,10 @@ class PipelineEngine:
         )
         self.console.print(f"Phases: {', '.join(phase_names)}")
         self.console.print()
+
+        # On resume: reapply scope filtering if analysis exists
+        if self.options.resume and manifest.phase_completed("analyze") and manifest.analysis:
+            self._apply_scope_filtering(manifest, ctx)
 
         for phase in phases:
             if self.options.resume and manifest.phase_completed(phase.name):
@@ -155,6 +203,11 @@ class PipelineEngine:
             manifest.mark_phase_completed(phase.name)
             ctx.save_manifest()
             self.console.print(f"  [green]✓[/green] {phase.name} complete")
+
+            # Post-analyze: scope filtering / review pause (codebase mode only)
+            if phase.name == "analyze":
+                if self._post_analyze_hook(manifest, ctx):
+                    return
 
         self.console.print()
         self.console.print(f"[bold green]Done![/bold green] Output: {ctx.output_dir}")
@@ -254,26 +307,8 @@ class PipelineEngine:
 
             # Scope filtering: after ANALYZE, before DESIGN
             if phase.name == "analyze":
-                scope_path = Path(manifest.output_dir) / "scope.yaml"
-
-                # --review mode: write scope.yaml and stop for user editing
-                if self.options.review:
-                    write_scope_file(manifest.analysis, scope_path)
-                    self.console.print()
-                    self.console.print(
-                        f"[bold yellow]Review mode:[/bold yellow] scope file written to "
-                        f"[cyan]{scope_path}[/cyan]"
-                    )
-                    self.console.print(
-                        "  Edit the file to enable/disable capabilities, then run:"
-                    )
-                    self.console.print(
-                        f"  [bold]mcp-anything generate {manifest.codebase_path} --resume[/bold]"
-                    )
+                if self._post_analyze_hook(manifest, ctx):
                     return
-
-                # Apply scope filtering if any scope options are set
-                self._apply_scope_filtering(manifest, ctx)
 
             # After DESIGN: write descriptions.yaml for user editing
             if phase.name == "design" and manifest.design:
