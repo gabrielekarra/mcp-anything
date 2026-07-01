@@ -188,6 +188,76 @@ class TestOpenAPI3Capabilities:
         assert info["base_url"] == "http://localhost:8080/api/v1"
         assert info["port"] == "8080"
 
+    def test_extracts_xquik_openapi31_search_contract(self):
+        spec = {
+            "openapi": "3.1.0",
+            "info": {"title": "Xquik API", "version": "2.4.8"},
+            "servers": [{"url": "https://xquik.com"}],
+            "components": {
+                "securitySchemes": {
+                    "apiKey": {
+                        "type": "apiKey",
+                        "name": "x-api-key",
+                        "in": "header",
+                    }
+                }
+            },
+            "paths": {
+                "/api/v1/x/tweets/search": {
+                    "get": {
+                        "operationId": "searchTweets",
+                        "summary": "Search X posts",
+                        "parameters": [
+                            {
+                                "name": "q",
+                                "in": "query",
+                                "required": True,
+                                "schema": {"type": "string"},
+                            },
+                            {
+                                "name": "queryType",
+                                "in": "query",
+                                "schema": {
+                                    "type": "string",
+                                    "enum": ["Latest", "Top"],
+                                    "default": "Latest",
+                                },
+                            },
+                            {
+                                "name": "limit",
+                                "in": "query",
+                                "schema": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 200,
+                                    "default": 20,
+                                },
+                            },
+                        ],
+                        "responses": {"200": {"description": "Search results"}},
+                    }
+                }
+            },
+        }
+
+        caps = openapi_to_capabilities(spec, "xquik-openapi.json")
+        cap = next(c for c in caps if c.name == "searchtweets")
+        params = {p.name: p for p in cap.parameters}
+        schemes = extract_security_schemes(spec)
+        info = extract_server_info(spec)
+
+        assert cap.http_method == "GET"
+        assert cap.http_path == "/api/v1/x/tweets/search"
+        assert cap.description == "Search X posts"
+        assert params["q"].required is True
+        assert params["queryType"].enum_values == ["Latest", "Top"]
+        assert params["queryType"].default == "Latest"
+        assert params["limit"].type == "integer"
+        assert params["limit"].default == "20"
+        assert schemes[0]["header"] == "x-api-key"
+        assert schemes[0]["location"] == "header"
+        assert info["base_url"] == "https://xquik.com"
+
 
 # ── Swagger 2.x Capability Extraction ──
 
