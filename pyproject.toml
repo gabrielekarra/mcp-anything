@@ -7,7 +7,7 @@ name = "mcp-anything"
 version = "0.2.1"
 description = "One command to turn any software into an MCP server"
 authors = [
-    { name = "Type-MCP", email = "typemcp@gmail.com" },
+    { name = "gabrielekarra" },
 ]
 readme = "README.md"
 requires-python = ">=3.10"
@@ -33,9 +33,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Type-MCP/mcp-anything"
-Repository = "https://github.com/Type-MCP/mcp-anything"
-Issues = "https://github.com/Type-MCP/mcp-anything/issues"
+Homepage = "https://github.com/gabrielekarra/mcp-anything"
+Repository = "https://github.com/gabrielekarra/mcp-anything"
+Issues = "https://github.com/gabrielekarra/mcp-anything/issues"
 
 [project.optional-dependencies]
 llm = ["anthropic>=0.40"]

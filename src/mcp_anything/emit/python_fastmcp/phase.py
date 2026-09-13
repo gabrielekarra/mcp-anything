@@ -321,7 +321,7 @@ async def {tool.name}({params_sig}) -> Any:
                 if style not in {"path", "body", "query"}:
                     style = "query"
                 param_styles[api_name] = style
-            ua_default = f"{self.design.server_name}-mcp/1.0 (+https://github.com/Type-MCP/mcp-anything)"
+            ua_default = f"{self.design.server_name}-mcp/1.0 (+https://github.com/gabrielekarra/mcp-anything)"
             return f'''    import httpx
     from urllib.parse import quote
     base_url = os.environ.get("{base_url_env}", "{spec_default}")
