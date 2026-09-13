@@ -1,3 +1,31 @@
+# v0.2.1 — Protocol & SDK currency
+
+The MCP ecosystem moved fast since v0.2.0 — the spec went stateless (2026-07-28), and both
+`fastmcp` and `mcp-use` shipped v2 SDKs with renamed APIs. This release catches generated
+servers up and trims the output surface to what we can keep current.
+
+## Highlights
+
+- **Two output targets, not three** — the Skybridge (MCP + ChatGPT App) emitter is removed.
+  `fastmcp` (Python, default) and `mcp-use` (TypeScript) remain and are the ones we're keeping
+  current going forward.
+- **Fixed a real breakage**: generated Python servers imported `from mcp.server.fastmcp import
+  FastMCP`, which `mcp` 2.x removed outright (renamed to `MCPServer`, different API). Every
+  Python code path — `generate` and `build` alike — now imports the actively-maintained
+  `fastmcp` package instead, with `fastmcp>=4.0` and `mcp>=2.0` as the new dependency floors.
+- **mcp-use v2 alignment**: generated TypeScript servers now import `MCPServer` from `"mcp-use"`
+  (root, v2.5+), use `inputSchema` and raw `CallToolResult` responses instead of the
+  now-deprecated helpers, and run via the `mcp-use dev`/`build`/`start` CLI instead of a
+  hand-wired `StdioServerTransport`.
+- **Tool annotations** — `readOnlyHint`/`destructiveHint`/`openWorldHint` are now inferred from
+  HTTP method for HTTP-backed tools, in both emitters.
+
+## Installation
+
+```bash
+pip install -U mcp-anything
+```
+
 # v0.2.0 — Domain pipeline
 
 The headline feature of this release is `mcp-anything build --brief` — a brief-driven pipeline that takes a plain-language description of what agents should be able to do and produces a production-ready MCP server automatically.
@@ -17,7 +45,7 @@ Five LLM phases run end-to-end:
 2. **Tool design** — groups related operations, writes agent-optimised descriptions, applies 2026 MCP design rules
 3. **Emit** — generates valid Python (FastMCP) or TypeScript (mcp-use) with all tools wired up
 4. **Skill bundle** — generates `SKILL.md` (agent guide with recipes, gotchas, anti-patterns) and `quick_queries.json`
-5. **Validation harness** — generates `eval_cases.json` and a `conformance_report.json` against 29 contract items
+5. **Validation harness** — generates `eval_cases.json` and a `conformance_report.json` against 28 contract items
 
 ### 2026 tool design rules
 
@@ -39,7 +67,7 @@ Added Kotlin Spring, Kotlin JAX-RS, Spring MVC, TypeScript Express, Python Click
 
 ### Conformance suite
 
-`CONTRACT.md` defines 29 testable output contract items (C-01..C-29). Every generated server is checked automatically; results appear in `conformance_report.json`.
+`CONTRACT.md` defines 28 testable output contract items (C-01..C-28). Every generated server is checked automatically; results appear in `conformance_report.json`.
 
 ## Installation
 

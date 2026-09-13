@@ -132,7 +132,7 @@ class ServerDesign(BaseModel):
     prompts: list[PromptSpec] = Field(default_factory=list)
     tool_modules: dict[str, list[str]] = Field(default_factory=dict)
     backend: Optional[BackendConfig] = None
-    dependencies: list[str] = Field(default_factory=lambda: ["mcp>=1.0"])
+    dependencies: list[str] = Field(default_factory=lambda: ["mcp>=2.0"])
     python_requires: str = ">=3.10"
     target_install_hint: str = ""  # pip install instruction for the target app
     transport: str = "stdio"  # "stdio" or "http"

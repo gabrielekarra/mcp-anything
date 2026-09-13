@@ -7,7 +7,7 @@ import importlib
 import importlib.util
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 {% set has_http_tools = tools | selectattr('impl.strategy', 'equalto', 'http_call') | list | length > 0 %}
 {% set has_protocol_tools = tools | selectattr('impl.strategy', 'equalto', 'protocol_call') | list | length > 0 %}
 {% if has_http_tools or has_protocol_tools %}

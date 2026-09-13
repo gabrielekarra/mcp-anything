@@ -1252,10 +1252,10 @@ class TestMcpUseHttp:
 
         # server.ts must reference mcp-use and each tool name
         server_ts = (tmp_output / "src" / "server.ts").read_text()
-        assert "mcp-use/server" in server_ts
+        assert 'from "mcp-use"' in server_ts
         assert "MCPServer" in server_ts
         assert "server.tool(" in server_ts
-        assert "await server.listen(3000)" in server_ts
+        assert "export default server;" in server_ts
         for name in tool_names:
             assert name in server_ts, f"Tool name {name!r} missing from server.ts"
 
@@ -1309,4 +1309,4 @@ class TestMcpUseCLI:
         server_ts = (tmp_output / "src" / "server.ts").read_text()
         assert "execAsync" in server_ts, "CLI tools must use execAsync"
         assert "BINARY_PATH" in server_ts, "CLI tools must reference BINARY_PATH"
-        assert "await server.listen(3000)" in server_ts
+        assert "export default server;" in server_ts

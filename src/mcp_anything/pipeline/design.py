@@ -799,7 +799,7 @@ class DesignPhase(Phase):
         enable_telemetry = is_http  # Enable telemetry for HTTP servers
 
         # Add backend-specific dependencies
-        dependencies = ["mcp>=1.0"]
+        dependencies = ["mcp>=2.0", "fastmcp>=4.0"]
         if any(t.impl.strategy == "http_call" for t in tools):
             dependencies.append("httpx>=0.27")
         if any(t.impl.strategy == "protocol_call" for t in tools):

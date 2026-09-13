@@ -5,7 +5,7 @@ LLM-driven pipeline that takes a customer's domain brief (use-cases in natural l
 and a data source (OpenAPI / gRPC / DB schema / SDK), and produces a fully-implemented,
 optimized MCP server plus skill bundle and validation artifacts.
 
-Three output backends: **Python/FastMCP**, **TypeScript/mcp-use**, and **TypeScript/Skybridge** (MCP + ChatGPT App with React views).
+Two output backends: **Python/FastMCP** (default) and **TypeScript/mcp-use**.
 
 Legacy path: `mcp-anything generate <path>` (codebase scanner, backwards-compatible).
 Domain path: `mcp-anything build --brief <brief.yaml>` (new, recommended).
@@ -21,10 +21,10 @@ Domain path: `mcp-anything build --brief <brief.yaml>` (new, recommended).
 5 phases: DOMAIN_MODELING → TOOL_DESIGN → EMIT → SKILL_BUNDLE → VALIDATION_HARNESS
 - Phase 1 (`domain_modeling.py`): LLM reads brief + data source → `domain_model.json`
 - Phase 2 (`tool_design.py`): LLM shapes tools per 2026 rules → `tool_spec.yaml`
-- Phase 3 (`emit/python_fastmcp/`, `emit/typescript_mcp_use/`, or `emit/typescript_skybridge/`): code generation
+- Phase 3 (`emit/python_fastmcp/` or `emit/typescript_mcp_use/`): code generation
 - Phase 4 (`skill_bundle.py`): LLM generates `SKILL.md` + `quick_queries.json`
 - Phase 5 (`validation_harness.py`): LLM generates `eval_cases.json`, optional live eval
-- Output contract: `CONTRACT.md` — 29 testable items (C-01..C-29) both emitters must satisfy
+- Output contract: `CONTRACT.md` — 28 testable items (C-01..C-28) both emitters must satisfy
 - Conformance suite: `src/mcp_anything/conformance/` with parity assertion and CI reporter
 
 ### Legacy Pipeline (preserved, unchanged)
@@ -51,7 +51,6 @@ Domain path: `mcp-anything build --brief <brief.yaml>` (new, recommended).
 - `src/mcp_anything/pipeline/llm_client.py` — shared LLM call utility with JSON retry
 - `src/mcp_anything/emit/python_fastmcp/phase.py` — Phase 3 (Python): ServerDesign → FastMCP server
 - `src/mcp_anything/emit/typescript_mcp_use/phase.py` — Phase 3 (TS): ServerDesign → mcp-use server
-- `src/mcp_anything/emit/typescript_skybridge/phase.py` — Phase 3 (Skybridge): ServerDesign → MCP + ChatGPT App server with LLM-generated React views
 - `src/mcp_anything/emit/base.py` — EmitPhase ABC + structural CONTRACT.md checker
 - `src/mcp_anything/pipeline/skill_bundle.py` — Phase 4: SKILL.md + quick_queries.json
 - `src/mcp_anything/pipeline/validation_harness.py` — Phase 5: eval_cases + conformance_report
@@ -311,6 +310,43 @@ Every supported framework has a functional test — not just a structural one.
 - Manifest integrity (analysis + design populated, files tracked)
 - AGENTS.md content (tool names documented)
 - **Scope filtering** (include/exclude patterns, scope file, review/resume workflow)
+
+### Protocol & SDK currency — DONE (2026-09-13)
+
+The MCP spec moved to **2026-07-28** (stateless core, `server/discover`, Multi Round-Trip
+Requests replacing server-initiated `sampling`/`roots`/`elicitation`, `CacheableResult`
+list caching) and `mcp-use` shipped **v2.5** (built on the split
+`@modelcontextprotocol/{core,client,server,ext-apps}` v2 SDK, CLI-driven `dev`/`build`/`start`
+lifecycle, HTTP-first/stateless runtime). Both emitters were updated accordingly:
+- **Removed the Skybridge emitter** — only `fastmcp` (default) and `mcp-use` targets remain.
+  Deleted `emit/typescript_skybridge/`, its test, the `examples/spotify-playlist-generator/`
+  generated example, and the `--target skybridge` CLI/engine wiring.
+- **TypeScript/mcp-use, both pipelines** (`emit/typescript_mcp_use/phase.py` for `build`,
+  `pipeline/implement_mcp_use.py` + `codegen/templates/mcp_use/server.ts.j2` +
+  `pipeline/package_mcp_use.py` for legacy `generate`): import `MCPServer` from `"mcp-use"`
+  (root, not the old `"mcp-use/server"` or `@modelcontextprotocol/sdk` v1 paths), use
+  `inputSchema` (not `schema`), return raw `CallToolResult` (`content` + `structuredContent`)
+  instead of the now-deprecated `text()`/`object()` response helpers, and end with
+  `export default server;` — no more hand-rolled `StdioServerTransport`/`server.listen(3000)`.
+  `package.json` scripts now call `mcp-use dev/build/start` (pinned to `--host 0.0.0.0 --port 8000`
+  in `start`, matching CONTRACT C-15) and depend only on `mcp-use>=2.5` + `zod>=4.0`.
+- **Python/FastMCP** (`emit/python_fastmcp/phase.py`): dependency floors bumped to
+  `fastmcp>=4.0`, `mcp>=2.0` (was `fastmcp>=0.1`, `mcp>=1.0` — also fixed the same stale
+  default in `models/design.py` and `pipeline/tool_design.py`, which otherwise shadowed the
+  emitter's own floor via the dependency-merge logic in `_emit_pyproject`).
+- **Tool annotations** — both emitters now emit `readOnlyHint`/`destructiveHint`/`openWorldHint`
+  for `http_call` tools, inferred from the HTTP method.
+- **Compact responses fixed in TypeScript** — the TS emitter previously never truncated
+  non-verbose payloads (only Python did); it now shares the same `compact()` behavior.
+- **Hardened docstring interpolation** (`emit/python_fastmcp/phase.py`): `server_description`/
+  `tool.description` are now escaped before landing inside triple-quoted Python docstrings
+  (matching the `safe_docstring` Jinja filter the legacy templates already used) — an
+  unescaped `"""` in a domain brief or OpenAPI description could otherwise break out of the
+  docstring and inject code into the generated server.
+- **CONTRACT.md**: C-14 (stdio) is now **[py]**-only; C-15 (HTTP) documents that the TS target
+  reaches `0.0.0.0:8000` via `npm run start`, not an `MCP_TRANSPORT` env var; C-28 [ts] drops
+  the `@modelcontextprotocol/sdk` requirement (supplied transitively by `mcp-use`); C-01..C-28
+  count corrected (was mis-stated as C-01..C-29 in this file and ROADMAP.md).
 
 ---
 

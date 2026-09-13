@@ -126,7 +126,7 @@ class TestServerTemplate:
         server_py = (tmp_path / "src/mcp_testapp/server.py").read_text()
         ast.parse(server_py)
         assert 'os.environ.get("MCP_TRANSPORT", "http")' in server_py
-        assert 'server.run(transport="streamable-http")' in server_py
+        assert 'server.run(transport="http", host=host, port=port)' in server_py
 
     def test_http_server_includes_telemetry(self, tmp_path):
         design = _make_design("http")

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mcp-anything"
-version = "0.2.0"
+version = "0.2.1"
 description = "One command to turn any software into an MCP server"
 authors = [
     { name = "Type-MCP", email = "typemcp@gmail.com" },
@@ -42,6 +42,16 @@ llm = ["anthropic>=0.40"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    # The test suite generates servers and imports/runs them in-process
+    # (test_functional.py, test_integration.py, test_e2e_http.py,
+    # test_e2e_mcp_session.py), so it needs the same runtime deps a
+    # generated Python/FastMCP server declares in its own pyproject.toml.
+    "mcp>=2.0",
+    "fastmcp>=4.0",
+    "httpx>=0.27.0",
+    "opentelemetry-api>=1.20",
+    "opentelemetry-sdk>=1.20",
+    "opentelemetry-exporter-otlp>=1.20",
 ]
 
 [project.scripts]

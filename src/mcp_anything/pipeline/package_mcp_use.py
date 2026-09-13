@@ -39,20 +39,18 @@ class PackageMcpUsePhase(Phase):
             "version": "1.0.0",
             "type": "module",
             "scripts": {
-                "build": "tsc",
-                "dev": "npx @mcp-use/cli dev",
-                "start": "node dist/server.js",
-                "inspector": "npx @mcp-use/inspector --url http://localhost:3000/mcp",
+                "dev": "mcp-use dev --entry src/server.ts",
+                "build": "mcp-use build --entry src/server.ts",
+                "start": "mcp-use start --host 0.0.0.0 --port 3000",
+                "typecheck": "tsc --noEmit",
             },
             "dependencies": {
-                "mcp-use": "latest",
+                "mcp-use": "^2.5.0",
                 "zod": "^4.0.0",
             },
             "devDependencies": {
-                "@mcp-use/cli": "latest",
-                "@mcp-use/inspector": "latest",
-                "typescript": "^5.0.0",
-                "@types/node": "^20.0.0",
+                "typescript": "^5.7.0",
+                "@types/node": "^22.0.0",
             },
         }
         self._write(output_dir, "package.json", json.dumps(package_json, indent=2) + "\n")
@@ -63,12 +61,11 @@ class PackageMcpUsePhase(Phase):
             "compilerOptions": {
                 "target": "ES2022",
                 "module": "ESNext",
-                "moduleResolution": "bundler",
-                "outDir": "./dist",
-                "rootDir": "./src",
+                "moduleResolution": "Bundler",
                 "strict": True,
                 "esModuleInterop": True,
                 "skipLibCheck": True,
+                "noEmit": True,
             },
             "include": ["src/**/*"],
         }
@@ -159,7 +156,7 @@ class PackageMcpUsePhase(Phase):
             "npm run dev",
             "```",
             "",
-            "Inspector: http://localhost:3000/inspector",
+            "Inspector: http://localhost:3000/mcp/inspector",
             "",
             "### Production",
             "",
@@ -237,7 +234,7 @@ class PackageMcpUsePhase(Phase):
         ctx.console.print("    [cyan]npm install && npm run dev[/cyan]")
         ctx.console.print()
         ctx.console.print(
-            "    Built-in inspector: [cyan]http://localhost:3000/inspector[/cyan]"
+            "    Built-in inspector: [cyan]http://localhost:3000/mcp/inspector[/cyan]"
         )
         ctx.console.print()
         ctx.console.print("    [bold]Add to your MCP client config:[/bold]")

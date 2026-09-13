@@ -156,8 +156,8 @@ class TestE2EHTTP:
 
             # 4. Call the get_users tool
             result = await mcp_server.call_tool("get_users", {})
-            # FastMCP returns (content_list, metadata) tuple
-            content_list = result[0] if isinstance(result, tuple) else result
+            # FastMCP's call_tool() returns a ToolResult (content/structured_content/meta/is_error)
+            content_list = result.content
             assert len(content_list) > 0
             response_text = content_list[0].text
             parsed = json.loads(response_text)
@@ -169,7 +169,7 @@ class TestE2EHTTP:
 
             # 6. Call health check tool
             result = await mcp_server.call_tool("get_health", {})
-            content_list = result[0] if isinstance(result, tuple) else result
+            content_list = result.content
             response_text = content_list[0].text
             parsed = json.loads(response_text)
             assert parsed == {"status": "ok"}

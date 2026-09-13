@@ -4,6 +4,7 @@ import ast
 import keyword
 import re
 from pathlib import Path
+from typing import Optional
 
 from mcp_anything.emit.base import EmitPhase
 from mcp_anything.models.design import ServerDesign
@@ -188,12 +189,12 @@ class PythonFastMCPEmitter:
             for t in self.design.tools
         )
         tool_registrations = "\n".join(
-            f"mcp.tool()({t.name})"
+            self._tool_registration_line(t)
             for t in self.design.tools
         )
         telemetry_import = "from .telemetry import record_call  # noqa: F401" if self.design.enable_telemetry else ""
 
-        content = f'''"""MCP server for {self.design.server_name}."""
+        content = f'''"""MCP server for {self._safe_doc(self.design.server_name)}."""
 import os
 from fastmcp import FastMCP
 
@@ -201,7 +202,7 @@ from fastmcp import FastMCP
 {tool_imports}
 
 mcp = FastMCP("{self.design.server_name}")
-mcp.description = """{self.design.server_description}"""
+mcp.description = """{self._safe_doc(self.design.server_description)}"""
 
 {tool_registrations}
 
@@ -219,6 +220,26 @@ if __name__ == "__main__":
 '''
         self._write(f"{self.package_name}/server.py", content)
         self._write(f"{self.package_name}/__init__.py", f'"""Generated MCP server: {self.design.server_name}."""\n')
+
+    def _tool_registration_line(self, tool) -> str:
+        annotations = self._http_annotations(tool)
+        if annotations:
+            return f"mcp.tool(annotations={annotations!r})({tool.name})"
+        return f"mcp.tool()({tool.name})"
+
+    def _http_annotations(self, tool) -> Optional[dict]:
+        """Best-effort MCP tool annotations, derived from HTTP method semantics."""
+        impl = tool.impl
+        if impl.strategy != "http_call" or not impl.http_method:
+            return None
+        method = impl.http_method.upper()
+        if method == "GET":
+            return {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": True}
+        if method == "DELETE":
+            return {"readOnlyHint": False, "destructiveHint": True, "openWorldHint": True}
+        if method in ("POST", "PUT", "PATCH"):
+            return {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}
+        return None
 
     _COMPACT_HELPER = '''
 def _compact(data, _depth: int = 0):
@@ -241,14 +262,14 @@ def _compact(data, _depth: int = 0):
             params_body = self._render_params_body(tool)
             call_code = self._render_call(tool)
 
-            content = f'''"""Tool: {tool.name}."""
+            content = f'''"""Tool: {self._safe_doc(tool.name)}."""
 import os
 from typing import Any, Optional
 {self._render_tool_imports(tool)}
 {self._COMPACT_HELPER}
 
 async def {tool.name}({params_sig}) -> Any:
-    """{tool.description}"""
+    """{self._safe_doc(tool.description)}"""
 {params_body}
 {call_code}
 '''
@@ -465,6 +486,12 @@ async def {tool.name}({params_sig}) -> Any:
             return ""
         return ""
 
+    def _safe_doc(self, value: str) -> str:
+        """Escape text for safe interpolation inside a triple-double-quoted docstring."""
+        if not value:
+            return value
+        return value.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
+
     def _safe_py_identifier(self, value: str) -> str:
         s = re.sub(r"[^a-zA-Z0-9_]", "_", value)
         s = re.sub(r"_+", "_", s).strip("_")
@@ -578,7 +605,7 @@ CMD ["python", "-m", "{self.package_name}.server"]
 
     def _emit_pyproject(self) -> None:
         # Merge design deps with required base deps; drop duplicates by package name
-        base_deps = {"fastmcp": "fastmcp>=0.1", "httpx": "httpx>=0.27.0", "mcp": "mcp>=1.0"}
+        base_deps = {"fastmcp": "fastmcp>=4.0", "httpx": "httpx>=0.27.0", "mcp": "mcp>=2.0"}
         # Conditionally pull in grpc/protobuf if any tool needs them
         if any(t.impl.strategy == "grpc_call" for t in self.design.tools):
             base_deps["grpcio"] = "grpcio>=1.60.0"

@@ -43,11 +43,11 @@ Items marked **[ts]** apply to the TypeScript/mcp-use emitter only.
 
 ---
 
-## Transport [both]
+## Transport
 
-**C-14** — Server starts on stdio transport without requiring environment variables beyond optional API keys.  
-**C-15** — Server starts on HTTP transport at `0.0.0.0:8000` when `--transport http` is passed (or `MCP_TRANSPORT=http` is set).  
-**C-16** — Server is stateless: no in-process mutable state persists between tool calls.  
+**C-14** — **[py]** Server starts on stdio transport without requiring environment variables beyond optional API keys. The mcp-use (TypeScript) target is HTTP-first — see C-15.  
+**C-15** — **[both]** Server starts on HTTP transport at `0.0.0.0:8000`. **[py]**: via `--transport http` (or `MCP_TRANSPORT=http`). **[ts]**: via `npm run start`, the mcp-use CLI's production command; `package.json` pins its `--host`/`--port` to match.  
+**C-16** — **[both]** Server is stateless: no in-process mutable state persists between tool calls.  
 
 ---
 
@@ -79,14 +79,16 @@ Items marked **[ts]** apply to the TypeScript/mcp-use emitter only.
 ## Python/FastMCP Specifics [py]
 
 **C-27** — Generated server imports without error under Python ≥ 3.11.  
-**C-28** — `pyproject.toml` declares `mcp>=1.0` and `fastmcp>=0.1` as dependencies.  
+**C-28** — `pyproject.toml` declares `mcp>=2.0` and `fastmcp>=4.0` as dependencies.  
 
 ---
 
 ## TypeScript/mcp-use Specifics [ts]
 
 **C-27** — Generated server compiles without error under `tsc --noEmit` with `strict: true`.  
-**C-28** — `package.json` declares `@modelcontextprotocol/sdk` and `mcp-use` as dependencies.  
+**C-28** — `package.json` declares `mcp-use>=2.5` as a dependency. The mcp-use package supplies the
+underlying `@modelcontextprotocol/{core,client,server,ext-apps}` v2 SDK transitively — generated
+code does not import from `@modelcontextprotocol/sdk` (the pre-v2 package) directly.  
 
 ---
 

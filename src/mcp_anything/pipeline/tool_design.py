@@ -197,7 +197,7 @@ Return a JSON object with:
       "trigger_pattern": "<when an agent should prefer this over individual tools>"
     }}
   ],
-  "dependencies": ["mcp>=1.0"],
+  "dependencies": ["mcp>=2.0"],
   "transport": "stdio"
 }}
 """
@@ -428,7 +428,7 @@ def _parse_tool_spec(data: dict) -> ServerDesign:
         tools=tools,
         tool_groups=tool_groups,
         composed_tools=composed_tools,
-        dependencies=data.get("dependencies", ["mcp>=1.0"]),
+        dependencies=data.get("dependencies", ["mcp>=2.0"]),
         transport=data.get("transport", "stdio"),
         enable_telemetry=True,
         discovery_endpoint=True,

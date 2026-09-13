@@ -1,10 +1,19 @@
 # Roadmap
 
-Current version: **0.2.0**
+Current version: **0.2.1**
 
 ---
 
 ## Completed
+
+### v0.2.1 — Protocol & SDK currency
+
+- [x] **Removed the Skybridge emitter** — two output backends now: `fastmcp` (default) and `mcp-use`
+- [x] **mcp-use v2 alignment** — both the domain-pipeline emitter and the legacy `implement_mcp_use`/`server.ts.j2` path now generate `MCPServer` from `"mcp-use"` (root import, v2.5+), `inputSchema` (not `schema`), and raw `CallToolResult` envelopes (`content` + `structuredContent`) instead of the deprecated `text()`/`object()` response helpers
+- [x] **CLI-driven lifecycle** — generated servers run via `mcp-use dev`/`build`/`start` (pinned to `--host 0.0.0.0 --port 8000`, matching CONTRACT C-15) instead of a hand-rolled `StdioServerTransport`/`server.listen()`
+- [x] **SDK version floors bumped** — `fastmcp>=4.0`, `mcp>=2.0` (Python); `mcp-use>=2.5`, `zod>=4.0` (TypeScript), dropping the direct `@modelcontextprotocol/sdk` v1 dependency
+- [x] **Tool annotations** — `readOnlyHint`/`destructiveHint`/`openWorldHint` inferred from HTTP method for `http_call` tools, both emitters
+- [x] **Compact responses in TypeScript** — the TS/mcp-use emitter now truncates non-verbose responses the same way the Python emitter does (previously only Python compacted)
 
 ### v0.2.0 — Domain pipeline
 
@@ -14,7 +23,8 @@ Current version: **0.2.0**
 - [x] **Phase 3: Emit (Python/FastMCP)** — inline code generation, AST validation, all tools registered, Dockerfile, pyproject.toml
 - [x] **Phase 4: Skill bundle** — LLM generates `SKILL.md` (agent guide with recipes, gotchas, anti-patterns) and `quick_queries.json`
 - [x] **Phase 5: Validation harness** — LLM generates `eval_cases.json`, conformance report against 29 CONTRACT.md items
-- [x] **CONTRACT.md** — 29 testable output contract items (C-01..C-29) covering tools, auth, transport, telemetry, packaging, SKILL.md
+- [x] **CONTRACT.md** — 28 testable output contract items (C-01..C-28) covering tools, auth, transport, telemetry, packaging, SKILL.md
+- [x] **`--target mcp-use` support for `build`** — TypeScript/mcp-use emit phase in the domain pipeline (`emit/typescript_mcp_use/`)
 - [x] **Conformance suite** — `ConformanceParity`, `EvalRunner`, `ConformanceReporter` in `src/mcp_anything/conformance/`
 - [x] **Discovery endpoint** — every generated server exposes `GET /.well-known/mcp`
 - [x] **Telemetry** — anonymised per-call logging via `MCP_TELEMETRY_ENDPOINT`, never logs parameter values
@@ -41,9 +51,8 @@ Current version: **0.2.0**
 
 ## Planned
 
-### v0.3.0 — TypeScript emit for domain pipeline
+### v0.3.0 — Emit parity
 
-- [ ] **`--target mcp-use` support for `build`** — TypeScript/mcp-use emit phase in the domain pipeline (currently Python/FastMCP only)
 - [ ] **Emit parity tests** — conformance suite verifies both emitters produce equivalent tool signatures
 
 ### v0.4.0 — Multi-source and composition

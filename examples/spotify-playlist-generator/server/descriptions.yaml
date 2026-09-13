@@ -1,3 +1,0 @@
-generate_spotify_playlist: Generates a Spotify track list from a requested duration and mood/vibe, returning artwork, track names, durations, and singers; optionally creates the playlist in Spotify.
-setup_spotify_oauth: Returns a Spotify authorization URL for granting playlist write access to this MCP server.
-exchange_spotify_code: Exchanges a Spotify OAuth callback code for access and refresh tokens.
