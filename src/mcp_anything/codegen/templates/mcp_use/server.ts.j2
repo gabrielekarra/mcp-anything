@@ -62,7 +62,7 @@ server.tool(
       {{ param.name | ts_identifier }}: {{ param | zod_field }},
 {% endfor %}
     }),
-  },
+{{ tool | ts_annotations }}  },
   async ({
 {% for param in tool.parameters %}
     {{ param.name | ts_identifier }},
@@ -104,7 +104,10 @@ server.tool(
     const { stdout, stderr } = await execAsync([BINARY_PATH, ..._cmdArgs].filter(Boolean).join(" "));
     return toResult(stdout || stderr);
 {% elif tool.impl.strategy == "http_call" %}
-    const _url = new URL(`${BASE_URL}{{ tool.impl.http_path }}`);
+    // Path params are substituted into the path string before constructing
+    // URL — the URL constructor percent-encodes "{" and "}" immediately, so
+    // a literal "{param}" placeholder no longer exists in .pathname afterward.
+    let _path = {{ tool.impl.http_path | ts_string }};
     const _bodyFields: Record<string, unknown> = {};
 {% for param in tool.parameters %}
 {% if param.name != "verbose" %}
@@ -112,10 +115,19 @@ server.tool(
 {% set style = mapping.get("style", param.location or "") %}
 {% set api_name = mapping.get("api_name", param.api_name or param.name) %}
 {% if style == "path" %}
-    _url.pathname = _url.pathname.replace("{" + "{{ api_name }}" + "}", encodeURIComponent(String({{ param.name | ts_identifier }})));
+    _path = _path.replace("{" + "{{ api_name }}" + "}", encodeURIComponent(String({{ param.name | ts_identifier }})));
 {% elif style == "body" %}
     if ({{ param.name | ts_identifier }} != null) _bodyFields[{{ api_name | ts_string }}] = {{ param.name | ts_identifier }};
-{% else %}
+{% endif %}
+{% endif %}
+{% endfor %}
+    const _url = new URL(`${BASE_URL}${_path}`);
+{% for param in tool.parameters %}
+{% if param.name != "verbose" %}
+{% set mapping = tool.impl.arg_mapping.get(param.name, {}) %}
+{% set style = mapping.get("style", param.location or "") %}
+{% set api_name = mapping.get("api_name", param.api_name or param.name) %}
+{% if style != "path" and style != "body" %}
     if ({{ param.name | ts_identifier }} != null) _url.searchParams.set({{ api_name | ts_string }}, String({{ param.name | ts_identifier }}));
 {% endif %}
 {% endif %}

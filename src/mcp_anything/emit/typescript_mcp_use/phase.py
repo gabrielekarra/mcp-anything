@@ -233,19 +233,27 @@ export const handler = async (params: any): Promise<any> => {{
                 }
             param_meta_json = json.dumps(param_meta)
             return f'''    const baseUrl = process.env["{base_url_env}"] ?? "http://localhost:8000";
-    const url = new URL(`${{baseUrl}}{path}`);
+    let path = {json.dumps(path)};
     const bodyFields: Record<string, unknown> = {{}};
+    const queryParams: Record<string, string> = {{}};
     const paramMeta: Record<string, {{ style: string; apiName: string }}> = {param_meta_json};
     for (const [k, v] of Object.entries(params)) {{
       if (v == null || k === "verbose") continue;
       const meta = paramMeta[k] ?? {{ style: "query", apiName: k }};
       if (meta.style === "path") {{
-        url.pathname = url.pathname.replace(`{{${{meta.apiName}}}}`, encodeURIComponent(String(v)));
+        // Substitute into the path string before constructing URL — the URL
+        // constructor percent-encodes "{{" and "}}" immediately, so a literal
+        // "{{param}}" placeholder no longer exists in .pathname afterward.
+        path = path.replace(`{{${{meta.apiName}}}}`, encodeURIComponent(String(v)));
       }} else if (meta.style === "body") {{
         bodyFields[meta.apiName] = v;
       }} else {{
-        url.searchParams.set(meta.apiName, String(v));
+        queryParams[meta.apiName] = String(v);
       }}
+    }}
+    const url = new URL(`${{baseUrl}}${{path}}`);
+    for (const [k, v] of Object.entries(queryParams)) {{
+      url.searchParams.set(k, v);
     }}
     for (const [k, v] of Object.entries({constants})) {{
       url.searchParams.set(k, String(v));
@@ -322,8 +330,8 @@ export const handler = async (params: any): Promise<any> => {{
  * Discovery endpoint data (CONTRACT C-01..C-03)
  */
 
-const TOOLS = {tool_list};
-const GROUPS = {groups};
+const TOOLS: {{ name: string; description: string }}[] = {tool_list};
+const GROUPS: {{ name: string; disclosure_level: string }}[] = {groups};
 
 export function getDiscoveryInfo() {{
   return {{

@@ -162,7 +162,7 @@ def register_tools(server: FastMCP{% if design.backend %}, _get_backend{% endif 
 {% endif %}
 
 {% for tool in tools %}
-    @server.tool()
+    @server.tool({{ tool | py_annotations }})
 {% if design.enable_telemetry %}
     @_trace
 {% endif %}

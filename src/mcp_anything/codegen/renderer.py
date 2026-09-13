@@ -117,6 +117,26 @@ def _has_properties(param) -> bool:
     return bool(getattr(param, "properties", None))
 
 
+def _py_annotations(tool) -> str:
+    """Render a `@server.tool(...)` argument for best-effort MCP tool annotations,
+    derived from HTTP method semantics. Empty string for non-http_call tools,
+    so `@server.tool({{ tool | py_annotations }})` degrades to `@server.tool()`.
+    """
+    impl = getattr(tool, "impl", None)
+    if impl is None or getattr(impl, "strategy", None) != "http_call":
+        return ""
+    method = (getattr(impl, "http_method", "") or "").upper()
+    if method == "GET":
+        annotations = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": True}
+    elif method == "DELETE":
+        annotations = {"readOnlyHint": False, "destructiveHint": True, "openWorldHint": True}
+    elif method in ("POST", "PUT", "PATCH"):
+        annotations = {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}
+    else:
+        return ""
+    return f"annotations={annotations!r}"
+
+
 def _zod_type(type_str: str) -> str:
     """Map a type string to a Zod schema expression."""
     mapping = {
@@ -170,6 +190,29 @@ def _zod_field(param) -> str:
     return base
 
 
+def _ts_annotations(tool) -> str:
+    """Render best-effort MCP tool annotations, derived from HTTP method semantics.
+
+    Mirrors the Python and domain-pipeline TypeScript emitters so all three
+    code generation paths agree on the same readOnlyHint/destructiveHint/
+    openWorldHint inference for http_call tools.
+    """
+    impl = getattr(tool, "impl", None)
+    if impl is None or getattr(impl, "strategy", None) != "http_call":
+        return ""
+    method = (getattr(impl, "http_method", "") or "").upper()
+    if method == "GET":
+        annotations = {"readOnlyHint": "true", "destructiveHint": "false", "openWorldHint": "true"}
+    elif method == "DELETE":
+        annotations = {"readOnlyHint": "false", "destructiveHint": "true", "openWorldHint": "true"}
+    elif method in ("POST", "PUT", "PATCH"):
+        annotations = {"readOnlyHint": "false", "destructiveHint": "false", "openWorldHint": "true"}
+    else:
+        return ""
+    fields = ", ".join(f"{k}: {v}" for k, v in annotations.items())
+    return f"    annotations: {{ {fields} }},\n"
+
+
 def _ts_string(value: str) -> str:
     """Wrap a value in a double-quoted TypeScript string literal, escaping as needed."""
     if not value:
@@ -219,6 +262,7 @@ def create_mcp_use_jinja_env() -> Environment:
     # TypeScript / Zod specific filters
     env.filters["zod_type"] = _zod_type
     env.filters["zod_field"] = _zod_field
+    env.filters["ts_annotations"] = _ts_annotations
     env.filters["ts_string"] = _ts_string
     env.filters["ts_identifier"] = _ts_identifier
 
@@ -244,6 +288,7 @@ def create_jinja_env() -> Environment:
     env.filters["default_value"] = _default_value
     env.filters["safe_docstring"] = _safe_docstring
     env.filters["param_model_name"] = _param_model_name
+    env.filters["py_annotations"] = _py_annotations
     env.tests["has_properties"] = _has_properties
 
     return env
