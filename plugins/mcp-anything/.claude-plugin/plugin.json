@@ -1,0 +1,12 @@
+{
+  "name": "mcp-anything",
+  "description": "Generate a full MCP server from a codebase, an API spec, or a plain-language brief using mcp-anything.",
+  "version": "0.2.1",
+  "author": {
+    "name": "gabrielekarra",
+    "url": "https://github.com/gabrielekarra"
+  },
+  "homepage": "https://github.com/gabrielekarra/mcp-anything",
+  "repository": "https://github.com/gabrielekarra/mcp-anything",
+  "license": "Apache-2.0"
+}

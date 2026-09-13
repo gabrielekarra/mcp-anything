@@ -13,6 +13,19 @@ MCP-Anything turns any data source into a fully implemented MCP server — from 
 
 ---
 
+## Try it inside Claude Code
+
+No install step — the skill installs the CLI for you on first use.
+
+```
+/plugin marketplace add gabrielekarra/mcp-anything
+/plugin install mcp-anything@mcp-anything
+```
+
+Then just ask: *"turn this OpenAPI spec into an MCP server"* or *"wrap my Flask app as MCP tools"*. The skill figures out the right mode (`generate` vs. brief-driven `build`), runs it, and hands you back a working server plus the client config to add it.
+
+---
+
 ## Quick start
 
 **1. Install**

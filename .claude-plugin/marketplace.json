@@ -1,0 +1,25 @@
+{
+  "name": "mcp-anything",
+  "owner": {
+    "name": "gabrielekarra",
+    "url": "https://github.com/gabrielekarra/mcp-anything"
+  },
+  "description": "Turn any codebase, API spec, or plain-language description into a production-ready MCP server, right from Claude Code.",
+  "plugins": [
+    {
+      "name": "mcp-anything",
+      "source": "./plugins/mcp-anything",
+      "description": "Generate a full MCP server (Python/FastMCP or TypeScript/mcp-use) from a codebase, an OpenAPI/gRPC/GraphQL spec, or a plain-language brief.",
+      "version": "0.2.1",
+      "author": {
+        "name": "gabrielekarra",
+        "url": "https://github.com/gabrielekarra"
+      },
+      "homepage": "https://github.com/gabrielekarra/mcp-anything",
+      "repository": "https://github.com/gabrielekarra/mcp-anything",
+      "license": "Apache-2.0",
+      "keywords": ["mcp", "mcp-server", "codegen", "openapi", "grpc", "fastmcp"],
+      "category": "code-generation"
+    }
+  ]
+}
