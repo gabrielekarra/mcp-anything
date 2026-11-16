@@ -1,8 +1,9 @@
 """Tests for the CLI interface."""
 
 import pytest
+from rich.console import Console
 
-from mcp_anything.cli import build_parser, parse_options
+from mcp_anything.cli import _run_domain_command, build_parser, parse_options
 
 
 class TestCLIParser:
@@ -74,3 +75,61 @@ class TestCLIParser:
         args = parser.parse_args(["generate", "/some/path", "--name", "custom"])
         options = parse_options(args)
         assert options.resolved_name() == "custom"
+
+
+class _FakeDomainEngine:
+    """Stand-in for PipelineEngine that just records the options it was built with."""
+
+    last_options = None
+
+    def __init__(self, options, console):
+        _FakeDomainEngine.last_options = options
+
+    async def run_domain(self):
+        return None
+
+
+class TestBuildCommandServerName:
+    """`build`/`model` derive the server name from --name, else the brief's own
+    `server_name` field, else the brief file stem — in that order."""
+
+    def _run(self, tmp_path, monkeypatch, brief_text, extra_args=None):
+        monkeypatch.setattr(
+            "mcp_anything.pipeline.engine.PipelineEngine", _FakeDomainEngine
+        )
+        brief_path = tmp_path / "brief.yaml"
+        brief_path.write_text(brief_text)
+        parser = build_parser()
+        args = parser.parse_args(
+            ["build", "--brief", str(brief_path), "-o", str(tmp_path / "out"), "--no-llm"]
+            + (extra_args or [])
+        )
+        _run_domain_command(args, Console(quiet=True), phases=None)
+        return _FakeDomainEngine.last_options
+
+    def test_uses_brief_server_name_when_no_name_flag(self, tmp_path, monkeypatch):
+        options = self._run(tmp_path, monkeypatch, "server_name: aracne-sim\nuse_cases: []\n")
+        assert options.name == "aracne-sim"
+        assert options.resolved_name() == "aracne-sim"
+
+    def test_falls_back_to_file_stem_when_brief_has_no_server_name(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            "mcp_anything.pipeline.engine.PipelineEngine", _FakeDomainEngine
+        )
+        brief_path = tmp_path / "my_brief.yaml"
+        brief_path.write_text("use_cases: []\n")
+        parser = build_parser()
+        args = parser.parse_args(
+            ["build", "--brief", str(brief_path), "-o", str(tmp_path / "out"), "--no-llm"]
+        )
+        _run_domain_command(args, Console(quiet=True), phases=None)
+        assert _FakeDomainEngine.last_options.name == "my-brief"
+
+    def test_name_flag_overrides_brief_server_name(self, tmp_path, monkeypatch):
+        options = self._run(
+            tmp_path,
+            monkeypatch,
+            "server_name: aracne-sim\nuse_cases: []\n",
+            extra_args=["--name", "custom-name"],
+        )
+        assert options.name == "custom-name"

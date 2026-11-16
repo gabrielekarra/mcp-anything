@@ -1,12 +1,22 @@
 """Tests for scope filtering (--include, --exclude, --review, --scope-file)."""
 
+import asyncio
 import textwrap
 from pathlib import Path
 
 import pytest
 import yaml
+from rich.console import Console
 
+from mcp_anything.config import CLIOptions
 from mcp_anything.models.analysis import AnalysisResult, Capability, IPCType, ParameterSpec
+from mcp_anything.models.manifest import GenerationManifest
+from mcp_anything.pipeline.context import PipelineContext
+from mcp_anything.pipeline.design import (
+    DesignPhase,
+    _should_synthesize_run_cli_tool,
+    _tool_name_passes_scope_patterns,
+)
 from mcp_anything.pipeline.scope import apply_scope, read_scope_file, write_scope_file
 
 
@@ -376,3 +386,140 @@ class TestReviewResumeWorkflow:
         assert "get_internal_health" not in names
         assert "debug_dump" not in names
         assert "get_users" in names
+
+
+# ---------------------------------------------------------------------------
+# Bug: the synthesized "run_<app>" CLI tool (design.py::_make_run_cli_tool) is
+# added whenever `analysis.primary_ipc == IPCType.CLI`, but that field is set
+# once during ANALYZE and never recomputed after scope filtering removes
+# capabilities. On a codebase where --include filtered out every CLI-type
+# capability (e.g. --include '*mcp_api*' on a mixed CLI+library repo), the run
+# tool was still synthesized and pointed at a CLI that was never meant to be
+# exposed — and --include/--exclude never applied to it since it isn't a
+# Capability that scope.py's apply_scope() ever sees.
+# ---------------------------------------------------------------------------
+
+def _cli_capability(name: str, ipc_type: IPCType = IPCType.CLI) -> Capability:
+    return Capability(
+        name=name,
+        description=f"Description for {name}",
+        category="general",
+        ipc_type=ipc_type,
+    )
+
+
+def _make_cli_ctx(
+    tmp_path: Path,
+    capabilities: list[Capability],
+    *,
+    include: list[str] | None = None,
+    exclude: list[str] | None = None,
+    scope_file: Path | None = None,
+    app_name: str = "testapp",
+) -> tuple[PipelineContext, AnalysisResult]:
+    analysis = AnalysisResult(
+        app_name=app_name,
+        app_description="Test CLI application",
+        capabilities=capabilities,
+        primary_ipc=IPCType.CLI,
+    )
+    options = CLIOptions(
+        codebase_path=tmp_path,
+        output_dir=tmp_path / "out",
+        no_llm=True,
+        no_install=True,
+        include=include,
+        exclude=exclude,
+        scope_file=scope_file,
+    )
+    manifest = GenerationManifest(
+        pipeline_mode="legacy",
+        codebase_path=str(tmp_path),
+        output_dir=str(tmp_path / "out"),
+        server_name=app_name,
+        analysis=analysis,
+    )
+    ctx = PipelineContext(options, manifest, Console(quiet=True))
+    return ctx, analysis
+
+
+class TestRunCliToolScopeInteraction:
+    """`_should_synthesize_run_cli_tool` / `_tool_name_passes_scope_patterns`."""
+
+    def test_synthesizes_unconditionally_when_unscoped(self, tmp_path):
+        """Unscoped single-purpose CLI apps (httpstat-like) keep the old
+        unconditional behavior, even with zero surviving CLI capabilities."""
+        ctx, analysis = _make_cli_ctx(tmp_path, capabilities=[])
+        assert _should_synthesize_run_cli_tool(analysis, ctx) is True
+
+    def test_skips_when_scoped_and_no_cli_capability_survived(self, tmp_path):
+        ctx, analysis = _make_cli_ctx(
+            tmp_path,
+            capabilities=[_cli_capability("reset", ipc_type=IPCType.PYTHON_API)],
+            include=["*mcp_api*"],
+        )
+        assert _should_synthesize_run_cli_tool(analysis, ctx) is False
+
+    def test_synthesizes_when_scoped_but_a_cli_capability_survived(self, tmp_path):
+        ctx, analysis = _make_cli_ctx(
+            tmp_path,
+            capabilities=[_cli_capability("run", ipc_type=IPCType.CLI)],
+            include=["*"],
+        )
+        assert _should_synthesize_run_cli_tool(analysis, ctx) is True
+
+    def test_skips_when_scope_yaml_exists_on_disk_even_without_cli_flags(self, tmp_path):
+        """--review/--resume workflows leave scope.yaml on disk without
+        re-passing --include/--exclude; that must still count as scoped."""
+        ctx, analysis = _make_cli_ctx(
+            tmp_path,
+            capabilities=[_cli_capability("reset", ipc_type=IPCType.PYTHON_API)],
+        )
+        scope_path = Path(ctx.manifest.output_dir) / "scope.yaml"
+        scope_path.parent.mkdir(parents=True, exist_ok=True)
+        scope_path.write_text("capabilities: []\n")
+        assert _should_synthesize_run_cli_tool(analysis, ctx) is False
+
+    def test_name_patterns_unscoped_always_pass(self, tmp_path):
+        ctx, _ = _make_cli_ctx(tmp_path, capabilities=[])
+        assert _tool_name_passes_scope_patterns("run_testapp", ctx) is True
+
+    def test_name_patterns_exclude_removes_synthesized_tool(self, tmp_path):
+        ctx, _ = _make_cli_ctx(tmp_path, capabilities=[], exclude=["run_testapp"])
+        assert _tool_name_passes_scope_patterns("run_testapp", ctx) is False
+
+    def test_name_patterns_include_must_match_synthesized_tool_name(self, tmp_path):
+        ctx, _ = _make_cli_ctx(tmp_path, capabilities=[], include=["get_*"])
+        assert _tool_name_passes_scope_patterns("run_testapp", ctx) is False
+        assert _tool_name_passes_scope_patterns("get_users", ctx) is True
+
+    def test_design_phase_omits_run_tool_when_include_filtered_out_all_cli(self, tmp_path):
+        """End-to-end: mirrors the real bug — a codebase whose primary IPC is
+        CLI, but --include kept only a non-CLI (python-api) capability."""
+        ctx, _ = _make_cli_ctx(
+            tmp_path,
+            capabilities=[_cli_capability("reset", ipc_type=IPCType.PYTHON_API)],
+            include=["*mcp_api*"],
+        )
+        asyncio.run(DesignPhase().execute(ctx))
+        tool_names = {t.name for t in ctx.manifest.design.tools}
+        assert "run_testapp" not in tool_names
+        assert "reset" in tool_names
+
+    def test_design_phase_keeps_run_tool_when_unscoped(self, tmp_path):
+        ctx, _ = _make_cli_ctx(tmp_path, capabilities=[])
+        asyncio.run(DesignPhase().execute(ctx))
+        tool_names = {t.name for t in ctx.manifest.design.tools}
+        assert "run_testapp" in tool_names
+
+    def test_design_phase_excludes_run_tool_by_name_even_if_cli_survived(self, tmp_path):
+        """A CLI capability survives (so the tool would normally be
+        synthesized), but --exclude targets the synthesized tool by name."""
+        ctx, _ = _make_cli_ctx(
+            tmp_path,
+            capabilities=[_cli_capability("run", ipc_type=IPCType.CLI)],
+            exclude=["run_testapp"],
+        )
+        asyncio.run(DesignPhase().execute(ctx))
+        tool_names = {t.name for t in ctx.manifest.design.tools}
+        assert "run_testapp" not in tool_names

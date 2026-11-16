@@ -202,12 +202,27 @@ export const handler = async (params: any): Promise<any> => {{
 
     def _render_zod_schema(self, tool) -> str:
         lines = []
+        has_verbose = False
         for p in tool.parameters:
             z_type = self._to_zod_type(p.type)
             if not p.required:
                 z_type = f"{z_type}.optional()"
             lines.append(
                 f"    {json.dumps(p.name)}: {z_type}.describe({json.dumps(p.description)}),"
+            )
+            if p.name == "verbose":
+                has_verbose = True
+        if not has_verbose:
+            # CONTRACT C-10: every tool must accept `verbose`, even seed tools from
+            # codebase analysis that never declared one — the handler body always
+            # reads `params.verbose`, and a zod object schema silently strips any
+            # key not declared here.
+            lines.append(
+                "    "
+                + json.dumps("verbose")
+                + ": z.boolean().optional().describe("
+                + json.dumps("Return the full response payload instead of the compact default.")
+                + "),"
             )
         return "\n".join(lines)
 
@@ -314,6 +329,15 @@ export const handler = async (params: any): Promise<any> => {{
             "array": "z.array(z.unknown())",
             "object": "z.record(z.unknown())",
             "number": "z.number()",
+            # Tolerant aliases: seed tools normally arrive with JSON-schema names
+            # (normalized in pipeline/design.py), but defend against a raw Python
+            # spelling slipping through so e.g. `float` doesn't silently become a string.
+            "str": "z.string()",
+            "int": "z.number().int()",
+            "float": "z.number()",
+            "bool": "z.boolean()",
+            "list": "z.array(z.unknown())",
+            "dict": "z.record(z.unknown())",
         }
         return mapping.get(t, "z.string()")
 

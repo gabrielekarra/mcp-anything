@@ -7,14 +7,18 @@ from pathlib import Path
 import pytest
 
 from mcp_anything.config import CLIOptions
-from mcp_anything.models.design import ComposedTool, ServerDesign, ToolGroup, ToolSpec
+from mcp_anything.models.design import ComposedTool, ServerDesign, ToolGroup, ToolImpl, ToolSpec
 from mcp_anything.models.domain import DomainModel, UseCase
 from mcp_anything.models.manifest import GenerationManifest
 from mcp_anything.pipeline.context import PipelineContext
 from mcp_anything.pipeline.skill_bundle import (
     SkillBundlePhase,
     _SKILL_BUNDLE_SECTIONS,
+    _best_matching_tools,
+    _build_anti_patterns,
+    _build_gotchas,
     _build_quick_queries,
+    _build_recipe_workflows,
     _build_skill_fallback,
 )
 from rich.console import Console
@@ -137,3 +141,109 @@ def test_phase_requires_domain_and_tool_spec():
     phase = SkillBundlePhase()
     errors = phase.validate_preconditions(ctx)
     assert len(errors) == 2  # no domain_model, no tool_spec
+
+
+# ---------------------------------------------------------------------------
+# Bug: the --no-llm fallback always picked "the first tool" for a recipe/quick-query
+# regardless of relevance, and always mentioned HTTP status codes / manage_* CRUD
+# tools even when the server has neither. Deterministic output must still be
+# truthful: no match should mean no suggestion, not a wrong one.
+# ---------------------------------------------------------------------------
+
+def _unrelated_design() -> ServerDesign:
+    from mcp_anything.models.analysis import ParameterSpec
+    return ServerDesign(
+        server_name="weather",
+        server_description="Weather lookups.",
+        tools=[
+            ToolSpec(name="get_forecast", description="Returns the 5-day forecast for a city."),
+            ToolSpec(name="get_alerts", description="Returns active severe weather alerts."),
+        ],
+    )
+
+
+def _unrelated_domain_model() -> DomainModel:
+    return DomainModel(
+        server_name="weather",
+        domain_description="Weather data.",
+        use_cases=[
+            UseCase(
+                id="uc-01",
+                description="Reconcile quarterly invoices against ledger entries",
+                actor="agent",
+                expected_outcome="Reconciled ledger",
+            ),
+        ],
+        approved=True,
+    )
+
+
+def test_best_matching_tools_empty_when_no_overlap():
+    design = _unrelated_design()
+    assert _best_matching_tools("Reconcile quarterly invoices", design.tools) == []
+
+
+def test_best_matching_tools_uses_description_not_just_name():
+    design = _unrelated_design()
+    # "severe" and "alerts" only appear in get_alerts' description, not its name.
+    matches = _best_matching_tools("Warn me about severe conditions with alerts", design.tools)
+    assert [t.name for t in matches] == ["get_alerts"]
+
+
+def test_quick_queries_expected_tool_is_null_when_no_match():
+    qq = _build_quick_queries(_unrelated_domain_model(), _unrelated_design())
+    assert len(qq) == 1
+    assert qq[0]["expected_tool"] is None
+
+
+def test_recipe_workflows_omits_use_case_with_no_matching_tool():
+    body = _build_recipe_workflows(_unrelated_domain_model(), _unrelated_design())
+    assert "get_forecast" not in body
+    assert "get_alerts" not in body
+
+
+def test_recipe_workflows_includes_use_case_with_matching_tool(domain_model, design):
+    body = _build_recipe_workflows(domain_model, design)
+    assert "list_tasks" in body
+    assert "create_task" in body
+
+
+def test_gotchas_omit_http_status_line_without_http_tools():
+    body = _build_gotchas(_unrelated_design())
+    assert "HTTP" not in body
+    assert "status code" not in body
+
+
+def test_gotchas_include_http_status_line_with_http_tools():
+    design = ServerDesign(
+        server_name="api",
+        tools=[
+            ToolSpec(
+                name="list_items",
+                description="List items.",
+                impl=ToolImpl(strategy="http_call", http_method="GET", http_path="/items"),
+            )
+        ],
+    )
+    body = _build_gotchas(design)
+    assert "status code" in body
+
+
+def test_anti_patterns_omit_crud_line_without_manage_tools():
+    body = _build_anti_patterns(_unrelated_design())
+    assert "manage_" not in body
+
+
+def test_anti_patterns_include_crud_line_with_manage_tools():
+    design = ServerDesign(
+        server_name="tasks",
+        tools=[ToolSpec(name="manage_task", description="CRUD for tasks.")],
+    )
+    body = _build_anti_patterns(design)
+    assert "manage_*" in body
+
+
+def test_skill_fallback_all_sections_present_even_with_no_matches():
+    content = _build_skill_fallback(_unrelated_domain_model(), _unrelated_design())
+    for section in _SKILL_BUNDLE_SECTIONS:
+        assert section in content

@@ -296,6 +296,30 @@ def real_function(name: str) -> str:
         assert "test_something" not in cap_names
         assert "assert_valid" not in cap_names
 
+    def test_keeps_functions_ending_in_test_suffix(self, tmp_path):
+        """A "_test" suffix is not a pytest convention — pytest discovery only
+        recognizes a "test_" prefix — so ordinary production functions that
+        happen to end in "_test" (e.g. `run_hover_test`) must not be dropped.
+        Test files/dirs are already excluded upstream by the scanner.
+        """
+        code = '''
+def run_hover_test(duration_s: float = 3.0) -> dict:
+    """Run a hover stability test against the sim."""
+    return {"ok": True}
+
+def run_crawl_test(cycles: int = 6) -> dict:
+    """Run a crawl gait test against the sim."""
+    return {"ok": True}
+'''
+        (tmp_path / "mod.py").write_text(code)
+        fi = FileInfo(path="mod.py", language=Language.PYTHON, size_bytes=200, line_count=10)
+        result = analyze_python_file(tmp_path, fi)
+        caps = ast_results_to_capabilities({"mod.py": result}, None)
+
+        cap_names = [c.name for c in caps]
+        assert "run_hover_test" in cap_names
+        assert "run_crawl_test" in cap_names
+
     def test_skips_no_param_no_docstring_functions(self, tmp_path):
         code = '''
 def setup_logging():
@@ -369,6 +393,31 @@ def real_tool(name: str) -> str:
         assert "real_tool" in cap_names
         assert "make_color" not in cap_names
         assert "make_formatter" not in cap_names
+
+    def test_keeps_function_with_unrelated_nested_helper(self, tmp_path):
+        """A nested helper def plus a `return <local var>` is not a closure
+        factory — only a return that actually names the nested def is. Before
+        the fix, any function with *any* nested helper that also returned a
+        local variable by name (a very common pattern) was misclassified as
+        `returns_callable` and silently dropped.
+        """
+        code = '''
+def run_crawl_test(cycles: int = 6) -> dict:
+    """Run a crawl test and aggregate per-joint stats."""
+    def stats(arr: list) -> dict:
+        if not arr:
+            return {"peak": 0.0}
+        return {"peak": max(arr)}
+
+    result = {"cycles": cycles, "joint": stats([1, 2, 3])}
+    return result
+'''
+        (tmp_path / "mod.py").write_text(code)
+        fi = FileInfo(path="mod.py", language=Language.PYTHON, size_bytes=200, line_count=12)
+        result = analyze_python_file(tmp_path, fi)
+        caps = ast_results_to_capabilities({"mod.py": result}, None)
+
+        assert "run_crawl_test" in [c.name for c in caps]
 
     def test_skips_sys_exit_functions(self, tmp_path):
         code = '''

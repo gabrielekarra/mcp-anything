@@ -279,6 +279,7 @@ async def {tool.name}({params_sig}) -> Any:
 
     def _render_params_sig(self, tool) -> str:
         parts = []
+        has_verbose = any(p.name == "verbose" for p in tool.parameters)
         ordered = sorted(
             tool.parameters,
             key=lambda p: (p.name == "verbose", not p.required, p.name),
@@ -300,6 +301,12 @@ async def {tool.name}({params_sig}) -> Any:
                 parts.append(f"{name}: Annotated[Optional[{py_type}], {field}] = None")
             else:
                 parts.append(f"{name}: Annotated[{py_type}, {field}]")
+        if not has_verbose:
+            # CONTRACT C-10: every tool must accept `verbose`, even seed tools from
+            # codebase analysis that never declared one (the call body below always
+            # references it). Appended last since it always carries a default.
+            parts.append('verbose: Annotated[bool, Field(description="Return the full API response with '
+                         'metadata instead of a compact summary.")] = False')
         return ", ".join(parts)
 
     def _known_descriptions(self) -> dict:
@@ -539,6 +546,15 @@ async def {tool.name}({params_sig}) -> Any:
             "array": "list",
             "object": "dict",
             "number": "float",
+            # Tolerant aliases: seed tools normally arrive with JSON-schema names
+            # (normalized in pipeline/design.py), but defend against a raw Python
+            # spelling slipping through so e.g. `float` doesn't silently become `str`.
+            "str": "str",
+            "int": "int",
+            "float": "float",
+            "bool": "bool",
+            "list": "list",
+            "dict": "dict",
         }
         return mapping.get(t, "str")
 

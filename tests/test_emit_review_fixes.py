@@ -1,6 +1,8 @@
 """Regression tests for reviewed code generation paths."""
 
 import ast
+import asyncio
+import importlib.util
 import sys
 from types import SimpleNamespace
 
@@ -12,10 +14,19 @@ from mcp_anything.conformance.runner import EvalRunner
 from mcp_anything.emit.python_fastmcp.phase import PythonFastMCPEmitter
 from mcp_anything.emit.python_fastmcp.phase import PythonFastMCPEmitPhase
 from mcp_anything.emit.typescript_mcp_use.phase import TypeScriptMcpUseEmitter
-from mcp_anything.models.analysis import ParameterSpec
+from mcp_anything.models.analysis import Capability, IPCType, ParameterSpec
 from mcp_anything.models.design import ServerDesign, ToolImpl, ToolSpec
 from mcp_anything.models.validation import ConformanceReport, EvalCase, EvalResult
+from mcp_anything.pipeline.design import _capability_to_tool, _normalize_param_type
 from mcp_anything.pipeline.tool_design import _openapi_to_tool_specs, _proto_to_tool_specs
+
+
+def _import_module_from_path(path, module_name):
+    """Import a single generated .py file directly, without needing it on sys.path."""
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_python_fastmcp_grpc_uses_actual_request_message(tmp_path):
@@ -304,3 +315,222 @@ def test_eval_runner_and_reporter_mark_live_eval_results(monkeypatch, tmp_path):
         eval_run=False,
     )
     assert "Eval coverage: 100.0%" in ConformanceReporter.to_ci_output(report_with_legacy_flag)
+
+
+# ---------------------------------------------------------------------------
+# Bug: `verbose` referenced in every strategy body but not guaranteed to be a
+# parameter (seed tools from codebase analysis carry no `verbose` param, and
+# `--no-llm` skips the reshape step that would normally add one). CONTRACT C-10
+# requires every tool to accept `verbose`.
+# ---------------------------------------------------------------------------
+
+def test_python_fastmcp_adds_verbose_when_seed_tool_lacks_it(tmp_path, monkeypatch):
+    # A tiny real backend function the generated tool actually calls — this proves
+    # the generated code runs end-to-end, not just that it parses as valid Python.
+    backend_dir = tmp_path / "backend_pkg"
+    backend_dir.mkdir()
+    (backend_dir / "__init__.py").write_text("")
+    (backend_dir / "api.py").write_text(
+        "def reset(altitude_m):\n    return {'altitude_m': altitude_m, 'ok': True}\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    design = ServerDesign(
+        server_name="rover",
+        tools=[
+            ToolSpec(
+                name="reset",
+                description="Reset the rover.",
+                parameters=[
+                    ParameterSpec(name="altitude_m", type="number", required=True),
+                ],  # no "verbose" param — mirrors a seed tool from codebase analysis
+                impl=ToolImpl(
+                    strategy="python_call",
+                    python_module="backend_pkg.api",
+                    python_function="reset",
+                ),
+            )
+        ],
+    )
+
+    out_dir = tmp_path / "out"
+    PythonFastMCPEmitter(design, out_dir).emit_all()
+    tool_path = out_dir / "mcp_rover" / "tools" / "reset.py"
+    source = tool_path.read_text()
+    assert "verbose: Annotated[bool, Field(" in source and "summary.\")] = False" in source
+    ast.parse(source)  # sanity: still valid Python
+
+    module = _import_module_from_path(tool_path, "test_reset_tool_no_verbose_seed")
+    # Before the fix this raised NameError: name 'verbose' is not defined.
+    result = asyncio.run(module.reset(altitude_m=0.3))
+    assert result == {"altitude_m": 0.3, "ok": True}
+
+
+def test_python_fastmcp_does_not_duplicate_verbose_when_present(tmp_path):
+    design = ServerDesign(
+        server_name="rover",
+        tools=[
+            ToolSpec(
+                name="reset",
+                description="Reset the rover.",
+                parameters=[
+                    ParameterSpec(name="altitude_m", type="number", required=True),
+                    ParameterSpec(name="verbose", type="boolean", required=False, default="false"),
+                ],
+                impl=ToolImpl(strategy="stub"),
+            )
+        ],
+    )
+
+    PythonFastMCPEmitter(design, tmp_path).emit_all()
+    source = (tmp_path / "mcp_rover" / "tools" / "reset.py").read_text()
+    assert source.count("verbose: Annotated[bool") == 1
+    ast.parse(source)
+
+
+def test_typescript_emitter_adds_verbose_when_seed_tool_lacks_it(tmp_path):
+    design = ServerDesign(
+        server_name="rover",
+        tools=[
+            ToolSpec(
+                name="reset",
+                description="Reset the rover.",
+                parameters=[
+                    ParameterSpec(name="altitude_m", type="number", required=True),
+                ],
+                impl=ToolImpl(
+                    strategy="http_call",
+                    http_method="POST",
+                    http_path="/reset",
+                ),
+            )
+        ],
+    )
+
+    TypeScriptMcpUseEmitter(design, tmp_path).emit_all()
+    source = (tmp_path / "src" / "tools" / "reset.ts").read_text()
+    assert '"verbose": z.boolean().optional()' in source
+    # The handler body always reads params.verbose; it must resolve to a real
+    # schema key or a strict zod object silently strips it out.
+    assert "params.verbose" in source
+
+
+def test_typescript_emitter_does_not_duplicate_verbose_when_present(tmp_path):
+    design = ServerDesign(
+        server_name="rover",
+        tools=[
+            ToolSpec(
+                name="reset",
+                description="Reset the rover.",
+                parameters=[
+                    ParameterSpec(name="altitude_m", type="number", required=True),
+                    ParameterSpec(name="verbose", type="boolean", required=False),
+                ],
+                impl=ToolImpl(strategy="http_call", http_method="POST", http_path="/reset"),
+            )
+        ],
+    )
+
+    TypeScriptMcpUseEmitter(design, tmp_path).emit_all()
+    source = (tmp_path / "src" / "tools" / "reset.ts").read_text()
+    # The schema declares "verbose" as a field exactly once (the runtime call body
+    # separately references it via `k === "verbose"`, which isn't a schema entry).
+    assert source.count('"verbose": z.') == 1
+
+
+# ---------------------------------------------------------------------------
+# Bug: parameter types from codebase analysis arrive as Python-style spellings
+# (e.g. "float") rather than JSON-schema names ("number"), which both emitters'
+# type maps didn't recognize — so a `float` parameter silently became `str` and
+# FastMCP rejected a legitimate numeric argument.
+# ---------------------------------------------------------------------------
+
+def test_capability_to_tool_normalizes_python_type_names_to_json_schema():
+    cap = Capability(
+        name="reset",
+        description="Reset the rover.",
+        parameters=[
+            ParameterSpec(name="altitude_m", type="float", required=True),
+            ParameterSpec(name="cycles", type="int", required=True),
+            ParameterSpec(name="servo_torque_limited", type="bool", required=False),
+            ParameterSpec(name="pose", type="str", required=True),
+            ParameterSpec(name="already_correct", type="number", required=True),
+        ],
+        ipc_type=IPCType.PYTHON_API,
+    )
+
+    tool = _capability_to_tool(cap)
+    types = {p.name: p.type for p in tool.parameters}
+
+    assert types == {
+        "altitude_m": "number",
+        "cycles": "integer",
+        "servo_torque_limited": "boolean",
+        "pose": "string",
+        "already_correct": "number",
+    }
+
+
+@pytest.mark.parametrize(
+    "raw_type,expected",
+    [
+        ("float", "number"),
+        ("double", "number"),
+        ("int", "integer"),
+        ("bool", "boolean"),
+        ("str", "string"),
+        ("list", "array"),
+        ("list[str]", "array"),
+        ("dict", "object"),
+        ("Optional[float]", "string"),
+        ("number", "number"),
+        ("", "string"),
+        ("SomeCustomClass", "string"),
+    ],
+)
+def test_normalize_param_type_aliases(raw_type, expected):
+    assert _normalize_param_type(raw_type) == expected
+
+
+def test_python_fastmcp_to_py_type_accepts_float_alias(tmp_path):
+    """Defense-in-depth: even if a raw Python spelling slips past design.py's
+    normalization, the emitter itself must not silently fall back to `str`."""
+    design = ServerDesign(
+        server_name="rover",
+        tools=[
+            ToolSpec(
+                name="reset",
+                description="Reset the rover.",
+                parameters=[
+                    ParameterSpec(name="altitude_m", type="float", required=True),
+                ],
+                impl=ToolImpl(strategy="stub"),
+            )
+        ],
+    )
+
+    PythonFastMCPEmitter(design, tmp_path).emit_all()
+    source = (tmp_path / "mcp_rover" / "tools" / "reset.py").read_text()
+    assert "altitude_m: Annotated[float," in source
+    assert "altitude_m: Annotated[str," not in source
+
+
+def test_typescript_to_zod_type_accepts_float_alias(tmp_path):
+    design = ServerDesign(
+        server_name="rover",
+        tools=[
+            ToolSpec(
+                name="reset",
+                description="Reset the rover.",
+                parameters=[
+                    ParameterSpec(name="altitude_m", type="float", required=True),
+                ],
+                impl=ToolImpl(strategy="http_call", http_method="POST", http_path="/reset"),
+            )
+        ],
+    )
+
+    TypeScriptMcpUseEmitter(design, tmp_path).emit_all()
+    source = (tmp_path / "src" / "tools" / "reset.ts").read_text()
+    assert '"altitude_m": z.number()' in source
+    assert '"altitude_m": z.string()' not in source
