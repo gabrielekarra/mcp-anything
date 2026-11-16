@@ -1,10 +1,22 @@
 # Roadmap
 
-Current version: **0.2.1**
+Current version: **0.3.0**
 
 ---
 
 ## Completed
+
+### v0.3.0 — One command, and a grade for any MCP server
+
+- [x] **Any model** — `--model provider:model` / `MCP_ANYTHING_MODEL`: Anthropic, OpenAI, OpenRouter, Ollama, LM Studio, llama.cpp, vLLM; no model id hardcoded outside `llm.py`
+- [x] **One command** — `mcp-anything <url | spec | folder>` drafts the brief, builds, and saves `brief.yaml`
+- [x] **`mcp-anything install`** — Claude Code, Claude Desktop, Cursor, VS Code; merge, backup, idempotent
+- [x] **`mcp-anything grade`** — static score of any MCP server's tool list on 15 rules, text/JSON/Markdown, SVG and shields.io badges, `--min-score`, GitHub Action (`action.yml`)
+- [x] **`mcp-anything eval`** — run `eval_cases.json` against a live server, directly or through an agent with any model (the live eval runner from Future)
+- [x] **Leaderboard script** — `scripts/leaderboard.py` over `scripts/servers.yaml` (results still to be produced by a real run)
+- [x] **Generated tools document their parameters** — descriptions and enums from the spec reach the input schema (a Petstore server built without a model went from 56 to 95 on the grade)
+- [x] **CI and releases** — tests on Linux and macOS, Python 3.10 to 3.13; PyPI release on tags with trusted publishing
+- [x] **README claims reproducible** — comparisons with other projects' servers removed until they can be measured with `grade`
 
 ### v0.2.1 — Protocol & SDK currency
 
@@ -69,7 +81,6 @@ Current version: **0.2.1**
 ### Future
 
 - [ ] **MCP server registry** — publish generated servers for discovery and reuse
-- [ ] **Live eval runner** — run `eval_cases.json` against a live server and report pass rate
 - [ ] **npm / cargo / go package support** — generated servers in languages other than Python/TypeScript
 
 ---

@@ -1,0 +1,304 @@
+{
+ "tools": [
+  {
+   "name": "doThing0",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing1",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing2",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing3",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing4",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing5",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing6",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing7",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing8",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing9",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing10",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing11",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing12",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing13",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing14",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing15",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing16",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing17",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing18",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing19",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing20",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing21",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing22",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing23",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing24",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing25",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing26",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing27",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing28",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  },
+  {
+   "name": "doThing29",
+   "description": "Does it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "x": {}
+    }
+   }
+  }
+ ]
+}

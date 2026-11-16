@@ -496,11 +496,7 @@ def _generate_resources(analysis: AnalysisResult) -> list[ResourceSpec]:
 
 
 async def _llm_design(analysis: AnalysisResult) -> Optional[ServerDesign]:
-    """Use Claude API for design decisions."""
-    try:
-        import anthropic
-    except ImportError:
-        return None
+    """Use the model (see mcp_anything.llm) for design decisions."""
 
     caps_summary = json.dumps(
         [{"name": c.name, "description": c.description, "category": c.category} for c in analysis.capabilities],
@@ -518,16 +514,9 @@ Suggest:
 Return JSON with "tool_modules" and "resources" keys only."""
 
     try:
-        client = anthropic.Anthropic()
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = response.content[0].text
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1].rsplit("```", 1)[0]
-        return json.loads(text)
+        from mcp_anything.pipeline.llm_client import call_llm_for_json
+
+        return call_llm_for_json(prompt, max_tokens=2048)
     except Exception:
         return None
 
@@ -602,11 +591,7 @@ def _make_run_cli_tool(analysis: AnalysisResult) -> Optional[ToolSpec]:
 async def _enhance_descriptions_with_llm(
     tools: list[ToolSpec], app_name: str
 ) -> list[ToolSpec]:
-    """Use Claude to rewrite tool descriptions to be more useful for AI agents."""
-    try:
-        import anthropic
-    except ImportError:
-        return tools
+    """Use the model to rewrite tool descriptions to be more useful for AI agents."""
 
     tool_summaries = []
     for t in tools:
@@ -625,20 +610,9 @@ Return a JSON object mapping tool name to new description. Only include tools wh
 Example: {{"tool_name": "Better description here"}}"""
 
     try:
-        client = anthropic.Anthropic()
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = response.content[0].text
-        if "```" in text:
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-            text = text.strip()
+        from mcp_anything.pipeline.llm_client import call_llm_for_json
 
-        improvements = json.loads(text)
+        improvements = call_llm_for_json(prompt, max_tokens=1024)
 
         for tool in tools:
             if tool.name in improvements and isinstance(improvements[tool.name], str):

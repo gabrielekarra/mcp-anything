@@ -1,16 +1,21 @@
-"""Shared LLM client utility with JSON extraction and retry logic."""
+"""Shared LLM helpers: JSON extraction and retries, on top of `mcp_anything.llm`.
+
+The model is whatever `--model` or MCP_ANYTHING_MODEL chose (see llm.py).
+"""
 
 import json
-import re
+import logging
 from typing import Any, Optional
 
+from mcp_anything import llm
 
-_DEFAULT_MODEL = "claude-sonnet-4-6"
 _MAX_RETRIES = 3
 
 
 def _extract_json(text: str) -> str:
     """Strip markdown code fences and extract the first JSON object or array."""
+    import re
+
     text = text.strip()
     # Remove ```json ... ``` or ``` ... ``` fences
     fenced = re.sub(r"^```(?:json)?\s*\n?", "", text)
@@ -27,52 +32,33 @@ def _extract_json(text: str) -> str:
 def call_llm_for_json(
     prompt: str,
     system: Optional[str] = None,
-    model: str = _DEFAULT_MODEL,
+    model: Optional[str] = None,
     max_tokens: int = 16000,
 ) -> Any:
-    """Call the Claude API and return a parsed JSON object.
+    """Call the model and return a parsed JSON object.
 
     Retries up to _MAX_RETRIES times if the response is not valid JSON,
     feeding the parse error back to the model.
 
-    Raises ImportError if anthropic is not installed.
-    Raises RuntimeError if all retries are exhausted.
+    Raises llm.LLMUnavailable if no model can be used, RuntimeError if all
+    retries are exhausted.
     """
-    import anthropic
-
-    client = anthropic.Anthropic()
     messages: list[dict] = [{"role": "user", "content": prompt}]
     last_error: Optional[str] = None
 
-    for attempt in range(_MAX_RETRIES):
-        if attempt > 0 and last_error:
-            messages.append({
-                "role": "assistant",
-                "content": _last_response_text,
-            })
-            messages.append({
-                "role": "user",
-                "content": (
-                    f"Your previous response was not valid JSON. Parse error: {last_error}\n"
-                    "Please return ONLY the JSON object with no extra text or markdown."
-                ),
-            })
-
-        kwargs: dict = {
-            "model": model,
-            "max_tokens": max_tokens,
-            "messages": messages,
-        }
-        if system:
-            kwargs["system"] = system
-
-        response = client.messages.create(**kwargs)
-        _last_response_text = response.content[0].text
-
+    for _ in range(_MAX_RETRIES):
+        text = llm.chat(messages, system=system, max_tokens=max_tokens, model=model)
         try:
-            return json.loads(_extract_json(_last_response_text))
+            return json.loads(_extract_json(text))
         except json.JSONDecodeError as exc:
             last_error = str(exc)
+            messages += [
+                {"role": "assistant", "content": text or "(empty)"},
+                {"role": "user", "content": (
+                    f"Your previous response was not valid JSON. Parse error: {last_error}\n"
+                    "Please return ONLY the JSON object with no extra text or markdown."
+                )},
+            ]
 
     raise RuntimeError(
         f"LLM did not return valid JSON after {_MAX_RETRIES} attempts. "
@@ -83,42 +69,27 @@ def call_llm_for_json(
 def call_llm_for_text(
     prompt: str,
     system: Optional[str] = None,
-    model: str = _DEFAULT_MODEL,
+    model: Optional[str] = None,
     max_tokens: int = 8000,
 ) -> str:
-    """Call the Claude API and return the raw text response.
+    """Call the model and return the raw text response.
 
     Retries up to _MAX_RETRIES times on transient failures or empty responses.
-
-    Raises ImportError if anthropic is not installed.
-    Raises RuntimeError if all retries are exhausted.
+    Raises llm.LLMUnavailable at once if no model can be used.
     """
-    import anthropic
-
-    client = anthropic.Anthropic()
-    kwargs: dict = {
-        "model": model,
-        "max_tokens": max_tokens,
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    if system:
-        kwargs["system"] = system
-
     last_error: Optional[str] = None
     for _ in range(_MAX_RETRIES):
         try:
-            response = client.messages.create(**kwargs)
-            text = response.content[0].text.strip() if response.content else ""
-            if text:
-                if getattr(response, "stop_reason", None) == "max_tokens":
-                    import logging
-                    logging.getLogger(__name__).warning(
-                        "LLM response hit max_tokens (%d) — output may be truncated.", max_tokens
-                    )
-                return text
-            last_error = "Empty text response from LLM"
-        except Exception as exc:  # noqa: BLE001 — surface to caller after retries
-            last_error = f"{type(exc).__name__}: {exc}"
+            text = llm.complete(prompt, system=system, max_tokens=max_tokens, model=model).strip()
+        except llm.LLMUnavailable:
+            raise
+        except llm.LLMError as exc:
+            last_error = str(exc)
+            continue
+        if text:
+            return text
+        last_error = "Empty text response from LLM"
+        logging.getLogger(__name__).warning("LLM returned an empty response; retrying.")
 
     raise RuntimeError(
         f"LLM did not return usable text after {_MAX_RETRIES} attempts. "

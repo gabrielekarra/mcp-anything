@@ -1,0 +1,12 @@
+servers:
+  - name: Sloppy server
+    tools: sloppy.json
+    source: https://example.com/sloppy
+  - name: Good server
+    tools: good.json
+    source: https://example.com/good
+  - name: Needs a token
+    target: some-server
+    env: [NO_SUCH_TOKEN_FOR_TESTS]
+  - name: Not installed
+    target: definitely-not-a-command

@@ -1,0 +1,53 @@
+name: MCP grade
+description: Score how usable an MCP server is for agents, and fail the job below a minimum score.
+branding:
+  icon: check-circle
+  color: green
+
+inputs:
+  target:
+    description: 'What to grade: a command that starts the server, an http(s) URL, a tools/list JSON file, or a server folder.'
+    required: true
+  min-score:
+    description: Fail the job below this score (0 to 100). Empty means never fail.
+    required: false
+    default: ""
+  badge:
+    description: Write an SVG badge to this path (optional).
+    required: false
+    default: ""
+  version:
+    description: The mcp-anything version to install (default the latest).
+    required: false
+    default: ""
+
+outputs:
+  score:
+    description: The score from 0 to 100.
+    value: ${{ steps.grade.outputs.score }}
+  grade:
+    description: The letter grade.
+    value: ${{ steps.grade.outputs.grade }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - shell: bash
+      run: pip install "mcp-anything${{ inputs.version && format('=={0}', inputs.version) || '' }}"
+    - id: grade
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+        MIN_SCORE: ${{ inputs.min-score }}
+        BADGE: ${{ inputs.badge }}
+      run: |
+        mcp-anything grade "$TARGET" --format json > grade.json
+        python -c "import json; r = json.load(open('grade.json')); print(f\"score={r['score']}\"); print(f\"grade={r['grade']}\")" >> "$GITHUB_OUTPUT"
+        mcp-anything grade "$TARGET" --format markdown >> "$GITHUB_STEP_SUMMARY"
+        args=()
+        if [ -n "$BADGE" ]; then args+=(--badge "$BADGE"); fi
+        if [ -n "$MIN_SCORE" ]; then args+=(--min-score "$MIN_SCORE"); fi
+        mcp-anything grade "$TARGET" "${args[@]}" > /dev/null
