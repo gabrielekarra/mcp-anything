@@ -264,12 +264,14 @@ def _compact(data, _depth: int = 0):
 
             content = f'''"""Tool: {self._safe_doc(tool.name)}."""
 import os
-from typing import Any, Optional
+from typing import Annotated, Any, Literal, Optional
+
+from pydantic import Field
 {self._render_tool_imports(tool)}
 {self._COMPACT_HELPER}
 
 async def {tool.name}({params_sig}) -> Any:
-    """{self._safe_doc(tool.description)}"""
+    """{self._safe_doc(self._tool_description(tool))}"""
 {params_body}
 {call_code}
 '''
@@ -283,14 +285,40 @@ async def {tool.name}({params_sig}) -> Any:
         )
         for p in ordered:
             name = self._safe_py_identifier(p.name)
-            py_type = self._to_py_type(p.type)
-            if p.name == "verbose":
-                parts.append("verbose: bool = False")
-            elif not p.required:
-                parts.append(f"{name}: Optional[{py_type}] = None")
+            if p.enum_values:  # allowed values become part of the schema, not just prose
+                py_type = "Literal[" + ", ".join(repr(str(v)) for v in p.enum_values) + "]"
             else:
-                parts.append(f"{name}: {py_type}")
+                py_type = self._to_py_type(p.type)
+            # Field(description=...) puts the description in the tool's input schema. A parameter
+            # the spec left undescribed borrows the description of a same-named one elsewhere.
+            description = (p.description or "").strip() or self._known_descriptions().get(p.name, "")
+            field = f"Field(description={description!r})" if description else "Field()"
+            if p.name == "verbose":
+                parts.append('verbose: Annotated[bool, Field(description="Return the full API response with '
+                             'metadata instead of a compact summary.")] = False')
+            elif not p.required:
+                parts.append(f"{name}: Annotated[Optional[{py_type}], {field}] = None")
+            else:
+                parts.append(f"{name}: Annotated[{py_type}, {field}]")
         return ", ".join(parts)
+
+    def _known_descriptions(self) -> dict:
+        if not hasattr(self, "_descriptions_by_name"):
+            self._descriptions_by_name = {}
+            for other in self.design.tools:
+                for param in other.parameters:
+                    if param.description and param.description.strip():
+                        self._descriptions_by_name.setdefault(param.name, param.description.strip())
+        return self._descriptions_by_name
+
+    def _tool_description(self, tool) -> str:
+        """The tool's description; a short one is completed with what the tool calls and returns."""
+        text = (tool.description or "").strip()
+        impl = tool.impl
+        if len(text) < 60 and impl.strategy == "http_call" and impl.http_method and impl.http_path:
+            text = (f"{text.rstrip('.') or tool.name.replace('_', ' ').capitalize()}. Calls {impl.http_method.upper()} "
+                    f"{impl.http_path} and returns the JSON response, compacted unless verbose is true.")
+        return text
 
     def _render_params_body(self, tool) -> str:
         params = [p for p in tool.parameters if p.name != "verbose"]

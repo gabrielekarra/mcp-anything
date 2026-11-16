@@ -193,7 +193,40 @@ def build_parser() -> argparse.ArgumentParser:
     srv.add_argument("--host", default="0.0.0.0", help="HTTP host (default: 0.0.0.0)")
     srv.add_argument("--port", type=int, default=8000, help="HTTP port (default: 8000)")
 
+    # grade
+    grd = subparsers.add_parser(
+        "grade",
+        help="Score how usable any MCP server is for agents (a command, a URL, a tools JSON file or a server folder)",
+    )
+    grd.add_argument("target", help='e.g. "npx -y @modelcontextprotocol/server-everything", https://host/mcp, '
+                                    "tools.json, or ./my-mcp-server")
+    grd.add_argument("--format", choices=["text", "json", "markdown"], default="text")
+    grd.add_argument("--badge", type=Path, help="Write an SVG badge to this file")
+    grd.add_argument("--shields", type=Path, help="Write a shields.io endpoint JSON file")
+    grd.add_argument("--min-score", type=int, default=None, help="Exit with an error below this score (for CI)")
+    grd.add_argument("--timeout", type=float, default=60, help="Seconds to wait for the server")
+
     return parser
+
+
+def _run_grade_command(args: argparse.Namespace, console: Console) -> None:
+    from mcp_anything import grade as grading
+    from mcp_anything.grade.client import TargetError
+
+    try:
+        report = grading.grade(args.target, timeout=args.timeout)
+    except TargetError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        sys.exit(2)
+    output = {"text": grading.to_text, "json": lambda r: r.to_json(), "markdown": grading.to_markdown}[args.format](report)
+    print(output)
+    if args.badge:
+        args.badge.write_text(grading.badge_svg(report))
+    if args.shields:
+        args.shields.write_text(grading.shields_endpoint(report))
+    if args.min_score is not None and report.score < args.min_score:
+        console.print(f"[red]Score {report.score} is below the minimum of {args.min_score}.[/red]", highlight=False)
+        sys.exit(1)
 
 
 def parse_options(args: argparse.Namespace) -> CLIOptions:
@@ -378,6 +411,10 @@ def main(argv: Optional[list[str]] = None) -> None:
     if not args.command:
         parser.print_help()
         sys.exit(0)
+
+    if args.command == "grade":
+        _run_grade_command(args, console)
+        return
 
     if args.command == "status":
         from mcp_anything.pipeline.engine import show_status
