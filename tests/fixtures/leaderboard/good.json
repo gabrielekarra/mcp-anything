@@ -1,0 +1,92 @@
+{
+ "tools": [
+  {
+   "name": "search_issues",
+   "description": "Search issues across the user's repositories by text, state or label. Returns up to 50 matches, newest first.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string",
+      "description": "Words to look for in titles and bodies."
+     },
+     "state": {
+      "type": "string",
+      "enum": [
+       "open",
+       "closed",
+       "all"
+      ],
+      "description": "Which issues to include."
+     },
+     "label": {
+      "type": "string",
+      "description": "Only issues with this label, e.g. bug."
+     }
+    },
+    "required": [
+     "query"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": true
+   }
+  },
+  {
+   "name": "manage_issue",
+   "description": "Create, read, update or close one issue. Use operation to choose what to do; closing needs the issue number.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "operation": {
+      "type": "string",
+      "enum": [
+       "create",
+       "read",
+       "update",
+       "close"
+      ],
+      "description": "What to do with the issue."
+     },
+     "number": {
+      "type": "integer",
+      "description": "The issue number, for read, update and close."
+     },
+     "title": {
+      "type": "string",
+      "description": "The title, for create and update."
+     },
+     "body": {
+      "type": "string",
+      "description": "The text in Markdown, for create and update."
+     }
+    },
+    "required": [
+     "operation"
+    ]
+   },
+   "annotations": {
+    "destructiveHint": false
+   }
+  },
+  {
+   "name": "delete_comment",
+   "description": "Permanently delete one comment on an issue. Ask the user first: this cannot be undone.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "comment_id": {
+      "type": "integer",
+      "description": "The id of the comment, from search_issues or manage_issue."
+     }
+    },
+    "required": [
+     "comment_id"
+    ]
+   },
+   "annotations": {
+    "destructiveHint": true
+   }
+  }
+ ]
+}

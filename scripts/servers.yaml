@@ -1,0 +1,41 @@
+# Servers graded by scripts/leaderboard.py. Each entry needs a name, a source link,
+# and either a `target` (a command, a URL or a folder, as for `mcp-anything grade`)
+# or `tools` (a saved tools/list JSON file). `env` lists variables the server needs:
+# an entry whose variables are not set is reported as not graded.
+servers:
+  - name: Filesystem (reference)
+    target: npx -y @modelcontextprotocol/server-filesystem .
+    source: https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
+  - name: Memory (reference)
+    target: npx -y @modelcontextprotocol/server-memory
+    source: https://github.com/modelcontextprotocol/servers/tree/main/src/memory
+  - name: Everything (reference)
+    target: npx -y @modelcontextprotocol/server-everything
+    source: https://github.com/modelcontextprotocol/servers/tree/main/src/everything
+  - name: Sequential thinking (reference)
+    target: npx -y @modelcontextprotocol/server-sequential-thinking
+    source: https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking
+  - name: Fetch (reference)
+    target: uvx mcp-server-fetch
+    source: https://github.com/modelcontextprotocol/servers/tree/main/src/fetch
+  - name: Git (reference)
+    target: uvx mcp-server-git
+    source: https://github.com/modelcontextprotocol/servers/tree/main/src/git
+  - name: Time (reference)
+    target: uvx mcp-server-time
+    source: https://github.com/modelcontextprotocol/servers/tree/main/src/time
+  - name: GitHub (official)
+    target: docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server
+    env: [GITHUB_PERSONAL_ACCESS_TOKEN]
+    source: https://github.com/github/github-mcp-server
+  - name: Playwright (Microsoft)
+    target: npx @playwright/mcp@latest
+    source: https://github.com/microsoft/playwright-mcp
+  - name: Notion (official)
+    target: npx -y @notionhq/notion-mcp-server
+    env: [NOTION_TOKEN]
+    source: https://github.com/makenotion/notion-mcp-server
+  - name: Brave Search (official)
+    target: npx -y @brave/brave-search-mcp-server
+    env: [BRAVE_API_KEY]
+    source: https://github.com/brave/brave-search-mcp-server
