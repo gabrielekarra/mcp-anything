@@ -120,6 +120,8 @@ The action writes the report to the job summary and exposes `score` and `grade` 
 
 [`scripts/leaderboard.py`](scripts/leaderboard.py) grades the servers listed in [`scripts/servers.yaml`](scripts/servers.yaml) (the MCP reference servers and several official ones) and writes `docs/leaderboard.md`, dated and with the version used, so every number can be reproduced. Add a server with a pull request.
 
+**[See the current leaderboard](docs/leaderboard.md)**: 10 servers graded on 2026-11-16 with 0.3.0.
+
 ---
 
 ## Eval against a live server
