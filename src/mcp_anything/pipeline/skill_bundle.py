@@ -199,17 +199,10 @@ class SkillBundlePhase(Phase):
             return _build_skill_fallback(domain_model, design)
 
         try:
-            from mcp_anything.pipeline.llm_client import call_llm_for_json as _llm_json
-            import anthropic
-            client = anthropic.Anthropic()
+            from mcp_anything.pipeline.llm_client import call_llm_for_text
+
             prompt = _build_skill_prompt(domain_model, design)
-            response = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=16000,
-                system=_SKILL_BUNDLE_SYSTEM,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            content = response.content[0].text.strip()
+            content = call_llm_for_text(prompt, system=_SKILL_BUNDLE_SYSTEM, max_tokens=16000)
             content_lower = content.lower()
             # Validate required sections present (case-insensitive heading match)
             for section in _SKILL_BUNDLE_SECTIONS:

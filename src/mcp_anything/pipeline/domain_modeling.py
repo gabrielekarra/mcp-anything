@@ -256,6 +256,10 @@ class DomainModelingPhase(Phase):
             ctx.console.print(f"[yellow]LLM call failed ({exc}); using deterministic fallback.[/yellow]")
             return _deterministic_domain_model(brief)
 
+        if not isinstance(data, dict):
+            ctx.console.print("[yellow]LLM returned no domain model object; using deterministic fallback.[/yellow]")
+            return _deterministic_domain_model(brief)
+        data.setdefault("server_name", brief.server_name)
         data["approved"] = getattr(ctx.options, "auto_approve", False)
 
         # Attach data source metadata
@@ -267,7 +271,12 @@ class DomainModelingPhase(Phase):
             ))
         data["data_sources"] = [ds.model_dump() for ds in data_sources]
 
-        return DomainModel.model_validate(data)
+        try:
+            return DomainModel.model_validate(data)
+        except Exception as exc:  # small models often return incomplete objects
+            ctx.console.print(f"[yellow]LLM domain model was incomplete ({exc.__class__.__name__}); "
+                              "using deterministic fallback.[/yellow]")
+            return _deterministic_domain_model(brief).model_copy(update={"approved": data["approved"]})
 
     def _write_review_file(self, model: DomainModel, ctx: PipelineContext) -> None:
         review_path = ctx.output_dir / "domain_review.yaml"

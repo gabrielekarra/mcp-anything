@@ -13,6 +13,16 @@ from rich.console import Console
 
 from mcp_anything import __version__
 from mcp_anything.config import CLIOptions
+from mcp_anything.llm import DEFAULT_MODEL, PROVIDERS
+
+
+def _model_option(command: argparse.ArgumentParser) -> None:
+    command.add_argument(
+        "--model",
+        default=None,
+        help="Model for the LLM steps, as provider:model (default: $MCP_ANYTHING_MODEL or "
+        f"{DEFAULT_MODEL}). Providers: {', '.join(PROVIDERS)}.",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,7 +52,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Apply description overrides from descriptions.yaml and regenerate",
     )
-    gen.add_argument("--no-llm", action="store_true", help="Disable Claude API analysis")
+    gen.add_argument("--no-llm", action="store_true", help="Disable the LLM steps (static analysis only)")
+    _model_option(gen)
     gen.add_argument("--no-install", action="store_true", help="Skip auto-installing dependencies")
     gen.add_argument(
         "--transport",
@@ -86,12 +97,14 @@ def build_parser() -> argparse.ArgumentParser:
     ana = subparsers.add_parser("analyze", help="Run analysis phase only")
     ana.add_argument("codebase_path", help="Path to source code or URL to an API spec")
     ana.add_argument("--no-llm", action="store_true")
+    _model_option(ana)
     ana.add_argument("-v", "--verbose", action="store_true")
 
     # design
     des = subparsers.add_parser("design", help="Run analysis + design phases")
     des.add_argument("codebase_path", help="Path to source code or URL to an API spec")
     des.add_argument("--no-llm", action="store_true")
+    _model_option(des)
     des.add_argument("-v", "--verbose", action="store_true")
 
     # model — Phase 1 only: domain brief → domain_model.json
@@ -107,6 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
     mod.add_argument("--resume", action="store_true", help="Continue from saved domain_model.json")
     mod.add_argument("--auto-approve", dest="auto_approve", action="store_true", help="Skip sign-off gate")
     mod.add_argument("--no-llm", action="store_true")
+    _model_option(mod)
     mod.add_argument("-v", "--verbose", action="store_true")
 
     # build — full domain pipeline: Phases 1-5
@@ -130,6 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
     bld.add_argument("--eval-threshold", dest="eval_threshold", type=float, default=0.80)
     bld.add_argument("--ci", action="store_true", help="Hard-fail on coverage below threshold or parity divergence")
     bld.add_argument("--no-llm", action="store_true")
+    _model_option(bld)
     bld.add_argument("-v", "--verbose", action="store_true")
     bld.add_argument(
         "--include",
@@ -346,10 +361,19 @@ def _run_validate_command(args: argparse.Namespace, console: Console) -> None:
             sys.exit(1)
 
 
-def main() -> None:
+def main(argv: Optional[list[str]] = None) -> None:
     parser = build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     console = Console()
+
+    if getattr(args, "model", None):
+        from mcp_anything import llm
+
+        try:
+            llm.set_model(args.model)
+        except ValueError as exc:
+            console.print(f"[red]Error:[/red] {exc}")
+            sys.exit(2)
 
     if not args.command:
         parser.print_help()
