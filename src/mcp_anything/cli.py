@@ -224,6 +224,17 @@ def build_parser() -> argparse.ArgumentParser:
     ins.add_argument("--print", dest="print_only", action="store_true", help="Show the entry instead of writing it")
     ins.add_argument("--no-pip", action="store_true", help="Do not pip-install the server's package first")
 
+    # eval — run the eval cases against a live server
+    evl = subparsers.add_parser("eval", help="Run eval cases against a live server, directly or through an agent")
+    evl.add_argument("target", help="A server folder, a command that starts the server, or an http(s) URL")
+    evl.add_argument("--cases", type=Path, help="eval_cases.json (default: the one in the server folder)")
+    evl.add_argument("--agent", action="store_true", help="Give each use case to a model with the server's tools")
+    _model_option(evl)
+    evl.add_argument("--max-steps", type=int, default=8)
+    evl.add_argument("--min-pass", type=float, default=None, help="Exit with an error below this pass rate (0 to 1)")
+    evl.add_argument("--format", choices=["text", "json"], default="text")
+    evl.add_argument("--timeout", type=float, default=60)
+
     # grade
     grd = subparsers.add_parser(
         "grade",
@@ -291,6 +302,32 @@ def _install_into_clients(server_dir: Optional[Path], clients: list[str], consol
             console.print(f"Added [bold]{name}[/bold] to {client} ({path}). Restart the client to use it.")
         else:
             console.print(f"{name} is already in {client} ({path}).")
+
+
+def _run_eval_command(args: argparse.Namespace, console: Console) -> None:
+    from mcp_anything import evaluate, llm
+    from mcp_anything.grade.client import TargetError, open_session
+
+    folder = Path(args.target) if Path(args.target).is_dir() else None
+    cases_file = args.cases or (folder / "eval_cases.json" if folder else None)
+    if not cases_file or not Path(cases_file).exists():
+        console.print("[red]Error:[/red] no eval cases: pass --cases eval_cases.json")
+        sys.exit(2)
+    cases = evaluate.load_cases(cases_file)
+    try:
+        with open_session(args.target, timeout=args.timeout) as session:
+            if args.agent:
+                tasks = evaluate.tasks_from(cases, evaluate.load_use_cases(folder))
+                report = evaluate.run_agent(session, tasks, llm.tool_step, args.target, args.max_steps)
+            else:
+                report = evaluate.run_direct(session, cases, args.target)
+    except TargetError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        sys.exit(2)
+    print(report.to_json() if args.format == "json" else report.to_text())
+    if args.min_pass is not None and report.pass_rate < args.min_pass:
+        console.print(f"[red]Pass rate {report.pass_rate:.0%} is below the minimum of {args.min_pass:.0%}.[/red]")
+        sys.exit(1)
 
 
 def _run_grade_command(args: argparse.Namespace, console: Console) -> None:
@@ -507,6 +544,10 @@ def main(argv: Optional[list[str]] = None) -> None:
 
     if args.command == "grade":
         _run_grade_command(args, console)
+        return
+
+    if args.command == "eval":
+        _run_eval_command(args, console)
         return
 
     if args.command == "quick":

@@ -8,8 +8,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 class FakeModelServer:
     """Answers every request with the next scripted text (or `default`), and records the bodies."""
 
-    def __init__(self, *texts, default="{}", status=200, finish="stop"):
+    def __init__(self, *texts, default="{}", status=200, finish="stop", payloads=()):
         self.texts, self.default, self.status, self.finish = list(texts), default, status, finish
+        self.payloads = list(payloads)  # whole responses, sent before any scripted text
         self.requests = []  # (path, body, headers)
         server = self
 
@@ -20,8 +21,10 @@ class FakeModelServer:
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 server.requests.append((self.path, body, dict(self.headers)))
-                text = server.texts.pop(0) if server.texts else server.default
-                if server.status != 200:
+                text = server.texts.pop(0) if server.texts and not server.payloads else server.default
+                if server.payloads:
+                    payload = server.payloads.pop(0)
+                elif server.status != 200:
                     payload = {"error": {"message": text}}
                 elif self.path.endswith("/api/chat"):
                     payload = {"message": {"role": "assistant", "content": text}, "done": True}

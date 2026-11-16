@@ -26,15 +26,24 @@ class TargetError(RuntimeError):
 
 def load_tools(target: str, timeout: float = 60, env: Optional[dict] = None) -> tuple[list[dict], str]:
     """The tools of `target`, and a short description of where they came from."""
+    path = Path(target).expanduser()
+    if not target.startswith(("http://", "https://")) and path.is_file() and path.suffix == ".json":
+        return tools_from_json(json.loads(path.read_text())), str(path)
+    with open_session(target, timeout, env) as session:
+        return session.list_tools(), session.source
+
+
+def open_session(target: str, timeout: float = 60, env: Optional[dict] = None):
+    """A live session with the server: `with open_session(t) as s: s.list_tools(); s.call_tool(...)`."""
     if target.startswith(("http://", "https://")):
-        return HTTPClient(target, timeout).list_tools(), target
+        return HTTPClient(target, timeout)
     path = Path(target).expanduser()
     if path.is_file() and path.suffix == ".json":
-        return tools_from_json(json.loads(path.read_text())), str(path)
+        raise TargetError("A JSON file only lists tools: give a command, a URL or a server folder to call them.")
     if path.is_dir():
         command, cwd, extra = command_for_folder(path)
-        return StdioClient(command, timeout, cwd=cwd, env={**(env or {}), **extra}).list_tools(), str(path)
-    return StdioClient(shlex.split(target), timeout, env=env).list_tools(), target
+        return StdioClient(command, timeout, cwd=cwd, env={**(env or {}), **extra}, source=str(path))
+    return StdioClient(shlex.split(target), timeout, env=env, source=target)
 
 
 def tools_from_json(data) -> list[dict]:
@@ -64,52 +73,84 @@ def command_for_folder(folder: Path) -> tuple[list[str], Path, dict]:
     raise TargetError(f"{folder} has no server.py package and no mcp.json command to start.")
 
 
-class StdioClient:
-    def __init__(self, command: list[str], timeout: float = 60, cwd=None, env=None):
-        self.command, self.timeout, self.cwd = command, timeout, cwd
-        self.env = {**os.environ, **(env or {})}
-        self.errors: deque = deque(maxlen=20)
+class Session:
+    """What both transports share: the handshake, paging through tools, calling one."""
+
+    source = ""
+
+    def __enter__(self):
+        self.open()
+        self.request("initialize", {"protocolVersion": PROTOCOL, "capabilities": {},
+                                    "clientInfo": {"name": "mcp-anything", "version": "1"}})
+        self.notify("notifications/initialized")
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
 
     def list_tools(self) -> list[dict]:
+        tools, cursor = [], None
+        while True:
+            result = self.request("tools/list", {"cursor": cursor} if cursor else {})
+            tools += result.get("tools", [])
+            cursor = result.get("nextCursor")
+            if not cursor:
+                return tools
+
+    def call_tool(self, name: str, arguments: dict) -> dict:
+        """The tools/call result: {"content": [...], "isError": bool, ...}."""
+        return self.request("tools/call", {"name": name, "arguments": arguments})
+
+    def open(self):
+        pass
+
+    def close(self):
+        pass
+
+
+class StdioClient(Session):
+    def __init__(self, command: list[str], timeout: float = 60, cwd=None, env=None, source=""):
+        self.command, self.timeout, self.cwd, self.source = command, timeout, cwd, source or " ".join(command)
+        self.env = {**os.environ, **(env or {})}
+        self.errors: deque = deque(maxlen=20)
+        self.process = None
+        self.ids = 0
+
+    def open(self):
         try:
-            process = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE, cwd=self.cwd, env=self.env)
+            self.process = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                            stderr=subprocess.PIPE, cwd=self.cwd, env=self.env)
         except FileNotFoundError:
             raise TargetError(f"Cannot start `{self.command[0]}`: not installed or not on PATH.") from None
-        threading.Thread(target=self._read_errors, args=(process,), daemon=True).start()
-        lines: "queue.Queue[Optional[bytes]]" = _line_queue(process)
-        try:
-            self._send(process, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-                "protocolVersion": PROTOCOL, "capabilities": {}, "clientInfo": {"name": "mcp-anything-grade", "version": "1"}}})
-            self._wait(lines, 1)
-            self._send(process, {"jsonrpc": "2.0", "method": "notifications/initialized"})
-            tools, cursor, request_id = [], None, 2
-            while True:
-                self._send(process, {"jsonrpc": "2.0", "id": request_id, "method": "tools/list",
-                                     "params": {"cursor": cursor} if cursor else {}})
-                result = self._wait(lines, request_id)
-                tools += result.get("tools", [])
-                cursor, request_id = result.get("nextCursor"), request_id + 1
-                if not cursor:
-                    return tools
-        finally:
-            process.kill()
-            process.wait()
+        threading.Thread(target=self._read_errors, args=(self.process,), daemon=True).start()
+        self.lines = _line_queue(self.process)
 
-    @staticmethod
-    def _send(process, message):
+    def close(self):
+        if self.process:
+            self.process.kill()
+            self.process.wait()
+
+    def request(self, method, params):
+        self.ids += 1
+        self._send({"jsonrpc": "2.0", "id": self.ids, "method": method, "params": params})
+        return self._wait(self.ids)
+
+    def notify(self, method):
+        self._send({"jsonrpc": "2.0", "method": method})
+
+    def _send(self, message):
         try:
-            process.stdin.write((json.dumps(message) + "\n").encode())
-            process.stdin.flush()
+            self.process.stdin.write((json.dumps(message) + "\n").encode())
+            self.process.stdin.flush()
         except (BrokenPipeError, OSError):
             pass  # the server exited; _wait reports it with its error output
 
-    def _wait(self, lines, request_id):
+    def _wait(self, request_id):
         import queue
 
         while True:
             try:
-                line = lines.get(timeout=self.timeout)
+                line = self.lines.get(timeout=self.timeout)
             except queue.Empty:
                 raise TargetError(f"The server did not answer within {self.timeout:.0f}s{self._stderr()}") from None
             if line is None:
@@ -145,29 +186,22 @@ def _line_queue(process):
     return lines
 
 
-class HTTPClient:
+class HTTPClient(Session):
     """Streamable HTTP transport: JSON or server-sent events, with the session header."""
 
     def __init__(self, url: str, timeout: float = 60, headers: Optional[dict] = None):
-        self.url, self.timeout, self.headers, self.session = url, timeout, headers or {}, None
+        self.url, self.timeout, self.headers, self.session, self.source = url, timeout, headers or {}, None, url
+        self.ids = 0
 
-    def list_tools(self) -> list[dict]:
-        self._request(1, "initialize", {"protocolVersion": PROTOCOL, "capabilities": {},
-                                        "clientInfo": {"name": "mcp-anything-grade", "version": "1"}})
-        self._post({"jsonrpc": "2.0", "method": "notifications/initialized"}, expect=False)
-        tools, cursor, request_id = [], None, 2
-        while True:
-            result = self._request(request_id, "tools/list", {"cursor": cursor} if cursor else {})
-            tools += result.get("tools", [])
-            cursor, request_id = result.get("nextCursor"), request_id + 1
-            if not cursor:
-                return tools
-
-    def _request(self, request_id, method, params):
-        message = self._post({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
+    def request(self, method, params):
+        self.ids += 1
+        message = self._post({"jsonrpc": "2.0", "id": self.ids, "method": method, "params": params})
         if "error" in message:
             raise TargetError(f"{method}: {message['error'].get('message')}")
         return message.get("result") or {}
+
+    def notify(self, method):
+        self._post({"jsonrpc": "2.0", "method": method}, expect=False)
 
     def _post(self, message, expect=True):
         headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream",

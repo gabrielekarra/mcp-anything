@@ -181,3 +181,105 @@ def _visible(text: str) -> str:
     if "</think>" in text:
         text = text.split("</think>", 1)[1]
     return text.strip()
+
+
+# --- tool calling (used by `mcp-anything eval --agent`) --------------------------------------
+#
+# A transcript is a list of neutral turns:
+#   {"role": "user", "content": "..."}
+#   {"role": "assistant", "content": "...", "calls": [{"id", "name", "arguments"}], "raw": <provider data>}
+#   {"role": "tool", "results": [{"id", "name", "content": "...", "error": bool}]}
+
+
+def tool_step(transcript: list[dict], tools: list[dict], system: Optional[str] = None,
+              model: Optional[str] = None, max_tokens: int = 4000) -> dict:
+    """One model turn with MCP tools available. Returns an assistant turn for the transcript."""
+    chosen = resolve(model)
+    if chosen.provider == "anthropic":
+        return _anthropic_tools(chosen, transcript, tools, system, max_tokens)
+    return _openai_tools(chosen, transcript, tools, system, max_tokens)
+
+
+def _anthropic_tools(chosen, transcript, tools, system, max_tokens):
+    try:
+        import anthropic
+    except ImportError:
+        raise LLMUnavailable("Claude models need the Anthropic SDK: pip install 'mcp-anything[llm]'") from None
+    messages = []
+    for turn in transcript:
+        if turn["role"] == "user":
+            messages.append({"role": "user", "content": turn["content"]})
+        elif turn["role"] == "assistant":
+            messages.append({"role": "assistant", "content": turn["raw"]})
+        else:
+            messages.append({"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": r["id"], "content": r["content"], "is_error": r["error"]}
+                for r in turn["results"]]})
+    request = {"model": chosen.name, "max_tokens": max_tokens, "messages": messages,
+               "tools": [{"name": t["name"], "description": t.get("description") or "",
+                          "input_schema": t.get("inputSchema") or {"type": "object", "properties": {}}} for t in tools]}
+    if system:
+        request["system"] = system
+    try:
+        client = anthropic.Anthropic()
+        if chosen.name in FALLBACK_MODELS:
+            response = client.beta.messages.create(**request, betas=[FALLBACK_BETA], fallbacks="default")
+        else:
+            response = client.messages.create(**request)
+    except anthropic.APIError as error:
+        raise LLMError(f"Anthropic API error: {error}") from None
+    except (anthropic.AnthropicError, TypeError) as error:
+        raise LLMUnavailable(f"No Anthropic credentials: set ANTHROPIC_API_KEY or choose another --model ({error})") from None
+    if getattr(response, "stop_reason", None) == "refusal":
+        raise LLMError("The model declined this request.")
+    return {
+        "role": "assistant",
+        "content": "".join(b.text for b in response.content if getattr(b, "type", None) == "text"),
+        "calls": [{"id": b.id, "name": b.name, "arguments": b.input} for b in response.content
+                  if getattr(b, "type", None) == "tool_use"],
+        "raw": response.content,  # replayed unchanged, reasoning included
+    }
+
+
+def _openai_tools(chosen, transcript, tools, system, max_tokens):
+    ollama = chosen.provider == "ollama"
+    messages = [{"role": "system", "content": system}] if system else []
+    for turn in transcript:
+        if turn["role"] == "user":
+            messages.append({"role": "user", "content": turn["content"]})
+        elif turn["role"] == "assistant":
+            message = {"role": "assistant", "content": turn["content"] or ("" if ollama else None)}
+            if turn["calls"]:
+                message["tool_calls"] = [
+                    {"function": {"name": c["name"], "arguments": c["arguments"]}} if ollama else
+                    {"id": c["id"], "type": "function", "function": {"name": c["name"], "arguments": json.dumps(c["arguments"])}}
+                    for c in turn["calls"]]
+            messages.append(message)
+        else:
+            for r in turn["results"]:
+                messages.append({"role": "tool", "tool_name": r["name"], "content": r["content"]} if ollama else
+                                {"role": "tool", "tool_call_id": r["id"], "content": r["content"]})
+    specs = [{"type": "function", "function": {"name": t["name"], "description": t.get("description") or "",
+                                               "parameters": t.get("inputSchema") or {"type": "object", "properties": {}}}}
+             for t in tools]
+    if ollama:
+        body = {"model": chosen.name, "messages": messages, "tools": specs, "stream": False,
+                "options": {"num_ctx": int(os.environ.get("MCP_ANYTHING_CONTEXT", "32768"))}}
+        message = _post(f"{chosen.base_url}/api/chat", body, {}, str(chosen)).get("message") or {}
+    else:
+        body = {"model": chosen.name, "messages": messages, "tools": specs, "max_tokens": max_tokens}
+        headers = {"Authorization": f"Bearer {chosen.api_key}"} if chosen.api_key else {}
+        message = ((_post(f"{chosen.base_url}/chat/completions", body, headers, str(chosen)).get("choices") or [{}])[0]
+                   .get("message") or {})
+    calls = []
+    for index, call in enumerate(message.get("tool_calls") or []):
+        function = call.get("function") or {}
+        arguments = function.get("arguments") or {}
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments) if arguments.strip() else {}
+            except ValueError:
+                arguments = {"_unparsed": arguments}
+        calls.append({"id": call.get("id") or f"call_{len(transcript)}_{index}", "name": function.get("name", ""),
+                      "arguments": arguments})
+    return {"role": "assistant", "content": _visible(message.get("content") or ""), "calls": calls, "raw": None}
