@@ -7,7 +7,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/pypi/v/mcp-anything.svg)](https://pypi.org/project/mcp-anything/)
 
-![mcp-anything](banner.png)
+![mcp-anything](banner.jpg)
 
 MCP-Anything turns any data source into a fully implemented MCP server — from a plain-language brief describing what agents should be able to do. It also works directly from codebases, OpenAPI specs, gRPC protos, and GraphQL schemas. Two modes, one tool.
 

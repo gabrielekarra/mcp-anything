@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mcp-anything"
-version = "0.2.1"
+dynamic = ["version"]
 description = "One command to turn any software into an MCP server"
 authors = [
     { name = "gabrielekarra" },
@@ -57,6 +57,9 @@ dev = [
 [project.scripts]
 mcp-anything = "mcp_anything.cli:main"
 
+[tool.hatch.version]
+path = "src/mcp_anything/__init__.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/mcp_anything"]
 
@@ -65,4 +68,5 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = [
     "realworld: tests that clone real repos from GitHub (skip with -m 'not realworld')",
+    "live: tests that need a running MCP server started by a real package manager (npx, uvx, docker)",
 ]
