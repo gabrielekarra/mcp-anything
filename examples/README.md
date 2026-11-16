@@ -13,19 +13,7 @@ mcp-anything generate https://raw.githubusercontent.com/github/rest-api-descript
 
 **What was generated:** A complete MCP server with **1,093 tools** — one for every GitHub REST API endpoint — in seconds.
 
-### How it compares to the official GitHub MCP server
-
-The [official GitHub MCP server](https://github.com/github/github-mcp-server) is a hand-built Go project maintained by GitHub's team. Here's how the auto-generated version compares:
-
-|  | Official (hand-built) | **mcp-anything (auto-generated)** |
-|--|----------------------|----------------------------------|
-| **Language** | Go | Python |
-| **Build time** | Months | ~6 seconds |
-| **Tools** | ~80 (curated) | 1,093 (every endpoint) |
-| **Backend** | Native Go SDK + GraphQL | `httpx` HTTP proxy |
-| **Auth** | PAT / OAuth | PAT via `GITHUB_BASE_URL` + `GITHUB_API_KEY` env vars |
-| **Transport** | stdio, HTTP | stdio (default), HTTP (`--transport http`) |
-| **Docs** | Hand-written | Auto-generated AGENTS.md + MCP resources |
+These examples were made by the `generate` codebase scanner with `--no-llm`: one tool per endpoint, with the spec's own names and descriptions. They show what the scanner extracts, not the tool design `build` does with a brief (which groups related operations into fewer tools).
 
 ### Sample generated tools
 
@@ -87,9 +75,7 @@ github-server/
 
 ### Trade-offs
 
-The official server is **curated**: ~80 tools chosen for what LLMs actually need, with custom logic, GraphQL integration, and toolset filtering. The auto-generated server is **comprehensive**: 1,093 tools covering the entire REST API surface, but without hand-tuned descriptions or GraphQL queries.
-
-For most use cases, the auto-generated server is a working starting point that would have taken a team months to build manually.
+A server with a tool for every endpoint is complete, but 1,093 tools is far more than an agent can choose from well, and the list alone fills a large part of a model's context. `mcp-anything grade` reports exactly that (rules G01 and G02). For agents, scope it (next example) or use `build` with a brief, which designs fewer, grouped tools.
 
 ---
 
@@ -110,20 +96,13 @@ mcp-anything generate \
 
 ### Why 67 and not 80?
 
-The official server has **80 tools**, but:
+When this example was made (March 2026), the official server listed **80 tools**, but:
 - **11 use GraphQL or Copilot-specific APIs** that don't appear in the REST OpenAPI spec (discussions, projects, Copilot assignment)
 - **2 official tools map to the same REST endpoint** (`push_files` and `create_or_update_file` both use `PUT /repos/{owner}/{repo}/contents/{path}`; `search_issues` and `search_pull_requests` share the same search endpoint)
 
 That leaves **67 unique REST tools** — exactly what we generate.
 
-### How it compares
-
-|  | Official (hand-built) | Full auto-generated | **Scoped auto-generated** |
-|--|----------------------|---------------------|--------------------------|
-| **Tools** | ~80 (curated) | 1,093 (every endpoint) | **67 (matching official)** |
-| **Build time** | Months | ~6 seconds | ~6 seconds |
-| **Coverage** | Curated subset + GraphQL | Entire REST API | Same REST endpoints as official |
-| **Scope control** | Hardcoded in Go | None | `scope.yaml` (69 lines) |
+Compare any two servers yourself with `mcp-anything grade`, for example the official GitHub server against this one: the grade says how easy each tool list is for an agent to use, with the same rules for both.
 
 ### How the scope file works
 

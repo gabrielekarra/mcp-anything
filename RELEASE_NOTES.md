@@ -1,3 +1,27 @@
+# v0.3.0 — One command, and a grade for any MCP server
+
+## Highlights
+
+- **`mcp-anything <source>`**: a spec URL, a spec file or a code folder in, a server out. The brief is drafted for you and saved as `brief.yaml`.
+- **`mcp-anything grade <server>`**: scores any MCP server, over stdio or HTTP, from 0 to 100 on fifteen deterministic rules, with a fix for every finding. Badges, `--min-score` for CI, and a GitHub Action.
+- **`mcp-anything eval <server>`**: runs the generated `eval_cases.json` against the live server, directly or through an agent.
+- **`mcp-anything install`**: adds a server to Claude Code, Claude Desktop, Cursor or VS Code.
+- **Any model**: `--model ollama:qwen3:8b`, `openai:...`, `openrouter:...`, LM Studio, llama.cpp, vLLM, or Claude. No model id is hardcoded any more; the default is `claude-opus-5-5`.
+
+## Fixes
+
+- PyPI was still serving 0.2.0, whose generated Python servers import `mcp.server.fastmcp`, removed in `mcp` 2.x. This release ships the 0.2.1 fixes.
+- Generated Python tools now carry every parameter's description and allowed values into their input schema; before, they were dropped.
+- A model answer with valid but incomplete JSON no longer crashes domain modeling: it falls back to the deterministic model.
+- Replies that start with a thinking block no longer break a phase.
+- The banner is 155 KB instead of 4.6 MB.
+
+## Installation
+
+```bash
+pip install -U mcp-anything
+```
+
 # v0.2.1 — Protocol & SDK currency
 
 The MCP ecosystem moved fast since v0.2.0 — the spec went stateless (2026-07-28), and both

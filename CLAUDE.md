@@ -44,7 +44,7 @@ Domain path: `mcp-anything build --brief <brief.yaml>` (new, recommended).
 - SKILL.md: required sections Overview, Tools, Usage Patterns, Gotchas, Recipes, Anti-patterns (C-22)
 
 ## Key Files
-- `src/mcp_anything/cli.py` — CLI entry point (subcommands: model, build, validate, generate, serve)
+- `src/mcp_anything/cli.py` — CLI entry point (subcommands: quick, build, model, validate, generate, analyze, design, status, serve, install, grade, eval)
 - `src/mcp_anything/pipeline/engine.py` — phase orchestration; ALL_PHASES (legacy) + DOMAIN_PHASES
 - `src/mcp_anything/pipeline/domain_modeling.py` — Phase 1: domain brief → DomainModel
 - `src/mcp_anything/pipeline/tool_design.py` — Phase 2: DomainModel → ServerDesign (2026 rules)
@@ -347,6 +347,30 @@ lifecycle, HTTP-first/stateless runtime). Both emitters were updated accordingly
   reaches `0.0.0.0:8000` via `npm run start`, not an `MCP_TRANSPORT` env var; C-28 [ts] drops
   the `@modelcontextprotocol/sdk` requirement (supplied transitively by `mcp-use`); C-01..C-28
   count corrected (was mis-stated as C-01..C-29 in this file and ROADMAP.md).
+
+### v0.3.0 — DONE (2026-11-16)
+
+- **Model layer** (`src/mcp_anything/llm.py`): every model call goes through it. `--model provider:model`
+  or `MCP_ANYTHING_MODEL`; providers anthropic, openai, openrouter, ollama, lmstudio, llamacpp, vllm
+  (stdlib HTTP for all but Anthropic). Default `claude-opus-5-5` with server-side refusal fallbacks.
+  `tests/test_llm.py` fails if a `claude-*` model id appears anywhere else in `src/`.
+  `tool_step()` adds tool calling for `eval --agent`.
+- **One command** (`quick.py`): `mcp-anything <source>` is rewritten to `quick <source>` in `cli.main`
+  when the first word is not a subcommand (keep `COMMANDS` in `cli.py` in sync with the parser).
+- **Install** (`install.py`): client config paths and entry shapes for claude-code, claude-desktop,
+  cursor, vscode.
+- **Grade** (`grade/`): `client.py` is a stdlib MCP client (stdio, streamable HTTP, JSON file, server
+  folder) with sessions that can call tools; `rules.py` holds the 15 rules (G01..G15) and their
+  weights; `__init__.py` scores and renders. Generated servers must keep scoring >= 90
+  (`test_grade_generated_server`).
+- **Eval** (`evaluate.py`): direct and agent modes over the grade client's sessions.
+- **Emitter fix**: `emit/python_fastmcp/phase.py` writes `Annotated[..., Field(description=...)]`,
+  `Literal[...]` for enums, borrows descriptions of same-named params, completes short tool
+  descriptions with method and path.
+- **Domain modeling** falls back to the deterministic model on incomplete LLM JSON.
+- CI (`.github/workflows/tests.yml`), PyPI release on tags (`release.yml`), version single-sourced
+  in `src/mcp_anything/__init__.py`, `action.yml` (GitHub Action for grade),
+  `scripts/leaderboard.py` + `scripts/servers.yaml`.
 
 ---
 
