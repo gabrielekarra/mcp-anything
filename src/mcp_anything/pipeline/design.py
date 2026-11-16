@@ -1,5 +1,6 @@
 """Phase 2: DESIGN — transform AnalysisResult into ServerDesign."""
 
+import fnmatch
 import json
 import keyword
 import re
@@ -20,13 +21,64 @@ def _to_snake_case(name: str) -> str:
     return re.sub(r"_+", "_", s).strip("_").lower()
 
 
+# Aliases for parameter type spellings that aren't already canonical JSON-schema
+# names. Most analyzers (Python AST, Java, gRPC, ...) already emit JSON-schema names
+# for everything except floating-point numbers, where several still emit the Python
+# spelling "float" instead of "number".
+_PARAM_TYPE_ALIASES = {
+    "str": "string",
+    "int": "integer",
+    "float": "number",
+    "double": "number",
+    "bool": "boolean",
+    "list": "array",
+    "tuple": "array",
+    "set": "array",
+    "dict": "object",
+    "none": "null",
+    "bytes": "string",
+    "path": "string",
+    "any": "string",
+}
+
+_JSON_SCHEMA_PARAM_TYPES = {"string", "integer", "number", "boolean", "array", "object", "null"}
+
+
+def _normalize_param_type(raw_type: str) -> str:
+    """Normalize a parameter type name to a canonical JSON-schema type name.
+
+    Seed tools come from many analyzers that don't all agree on a type vocabulary —
+    some emit Python spellings (``float``, ``int``), others already emit JSON-schema
+    names, and a few pass through stray generics like ``list[str]`` or
+    ``Optional[int]``. Both emitters, SKILL.md, and eval-case generation all read
+    ``ParameterSpec.type`` downstream of this function, so it must be normalized
+    once here rather than re-guessed independently in every consumer.
+    """
+    if not raw_type:
+        return "string"
+    base = raw_type.strip()
+    bracket = base.find("[")
+    if bracket != -1:
+        base = base[:bracket]  # list[str] -> list, Optional[int] -> Optional
+    key = base.lower()
+    if key in ("optional", "union"):
+        return "string"  # analyzers normally unwrap these already; safe fallback
+    if key in _JSON_SCHEMA_PARAM_TYPES:
+        return key
+    return _PARAM_TYPE_ALIASES.get(key, "string")
+
+
 def _capability_to_tool(cap: Capability, primary_ipc: Optional[IPCType] = None) -> ToolSpec:
     """Convert an analysis Capability to a design ToolSpec."""
     impl = _build_tool_impl(cap, primary_ipc or cap.ipc_type)
+    parameters = [
+        p.model_copy(update={"type": _normalize_param_type(p.type)})
+        for p in cap.parameters
+    ]
     return ToolSpec(
         name=_to_snake_case(cap.name),
         description=cap.description,
-        parameters=cap.parameters,
+        parameters=parameters,
         return_type=cap.return_type,
         module=cap.category,
         ipc_type=cap.ipc_type,
@@ -588,6 +640,52 @@ def _make_run_cli_tool(analysis: AnalysisResult) -> Optional[ToolSpec]:
     )
 
 
+def _scope_filtering_active(ctx: PipelineContext) -> bool:
+    """Mirror engine.py's `_apply_scope_filtering` activation check.
+
+    True when --include/--exclude/--scope-file was passed, or a scope.yaml
+    already exists for this output (review/resume workflow).
+    """
+    options = ctx.options
+    if options.include or options.exclude or getattr(options, "scope_file", None):
+        return True
+    scope_path = Path(ctx.manifest.output_dir) / "scope.yaml"
+    return scope_path.exists()
+
+
+def _should_synthesize_run_cli_tool(analysis: AnalysisResult, ctx: PipelineContext) -> bool:
+    """Decide whether the generic `run_<app>` CLI tool should be synthesized.
+
+    `analysis.primary_ipc` is set once during ANALYZE and is never recomputed
+    after scope filtering removes capabilities — so on a scoped codebase build
+    (e.g. `--include '*mcp_api*'` on a mixed CLI+library repo) it can still say
+    "CLI" even though every actual CLI-type capability was filtered out,
+    producing a `run_*` tool that calls a CLI which was never meant to be
+    exposed. When scope filtering is active, only synthesize it if at least one
+    CLI-type capability actually survived filtering. Unscoped single-purpose
+    CLI apps (httpstat-like) keep the old, unconditional behavior.
+    """
+    if not _scope_filtering_active(ctx):
+        return True
+    return any(cap.ipc_type == IPCType.CLI for cap in analysis.capabilities)
+
+
+def _tool_name_passes_scope_patterns(name: str, ctx: PipelineContext) -> bool:
+    """Apply --include/--exclude glob patterns (by tool name) to a tool that is
+    synthesized *after* capability-level scope filtering already ran (e.g. the
+    generic run-CLI tool), so a pattern like `--exclude 'run_myapp'` still
+    removes it even though it was never a `Capability` scope.py could see.
+    """
+    options = ctx.options
+    include = options.include
+    exclude = options.exclude
+    if include and not any(fnmatch.fnmatch(name, pattern) for pattern in include):
+        return False
+    if exclude and any(fnmatch.fnmatch(name, pattern) for pattern in exclude):
+        return False
+    return True
+
+
 async def _enhance_descriptions_with_llm(
     tools: list[ToolSpec], app_name: str
 ) -> list[ToolSpec]:
@@ -709,9 +807,16 @@ class DesignPhase(Phase):
                 seen_names.add(tool.name)
 
         # Add a generic "run" tool for all CLI apps — always the most useful tool
-        if analysis.primary_ipc == IPCType.CLI:
+        # for an unscoped single-purpose CLI. Skip it when scope filtering is
+        # active and filtered out every real CLI capability, and still respect
+        # --include/--exclude by name since scope.py never saw this tool.
+        if analysis.primary_ipc == IPCType.CLI and _should_synthesize_run_cli_tool(analysis, ctx):
             run_tool = _make_run_cli_tool(analysis)
-            if run_tool and run_tool.name not in seen_names:
+            if (
+                run_tool
+                and run_tool.name not in seen_names
+                and _tool_name_passes_scope_patterns(run_tool.name, ctx)
+            ):
                 tools.insert(0, run_tool)
 
         console.print(f"    Designed {len(tools)} tools")

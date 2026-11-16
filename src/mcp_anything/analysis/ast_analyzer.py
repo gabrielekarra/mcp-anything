@@ -22,7 +22,13 @@ SKIP_NAMES = {
 
 # Prefixes/patterns for functions that should not become tools
 SKIP_PREFIXES = ("test_", "assert_", "_assert", "mock_", "fake_", "fixture_")
-SKIP_SUFFIXES = ("_test", "_fixture", "_factory", "_helper")
+# NOTE: no "_test" suffix here. Test *files* and *directories* are already excluded
+# by the scanner (see scanner.py) before AST analysis ever runs, and pytest's own
+# discovery convention only recognizes a "test_" prefix — never a "_test" suffix.
+# A suffix match would silently drop real production functions that merely end in
+# "_test" (e.g. `run_hover_test`, `run_crawl_test`), which are ordinary callables,
+# not test code.
+SKIP_SUFFIXES = ("_fixture", "_factory", "_helper")
 
 # Names that are almost never useful as tools
 SKIP_FUNCTION_NAMES = {
@@ -165,32 +171,49 @@ def _get_decorator_names(decorators: list[ast.expr]) -> list[str]:
     return names
 
 
-def _body_returns_callable(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Check if a function returns a callable (closure/function factory).
+def _iter_own_returns(node: ast.FunctionDef | ast.AsyncFunctionDef):
+    """Yield ``ast.Return`` nodes belonging directly to `node`'s own body.
 
-    Detects patterns like:
+    Recurses into control-flow blocks (if/for/while/try/with) but stops at
+    nested function/class boundaries — a `return` inside a nested def belongs
+    to that nested scope, not to `node`.
+    """
+    stack = list(ast.iter_child_nodes(node))
+    while stack:
+        item = stack.pop()
+        if isinstance(item, ast.Return):
+            yield item
+        elif isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        else:
+            stack.extend(ast.iter_child_nodes(item))
+
+
+def _body_returns_callable(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Check if a function returns one of its own nested function definitions
+    (a closure/function-factory pattern):
+
         def make_color(code):
             def color_func(s):
                 ...
             return color_func
-    """
-    # Check if the function body contains a nested function definition
-    has_nested_def = False
-    for child in ast.walk(node):
-        if child is node:
-            continue
-        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            has_nested_def = True
-            break
 
-    if not has_nested_def:
+    Merely containing a nested helper AND returning some unrelated local
+    variable by name (e.g. a helper `stats()` plus a final `return result`) is
+    an extremely common, perfectly ordinary pattern and must not be flagged —
+    only a return that actually names one of the nested defs counts.
+    """
+    nested_def_names = {
+        child.name
+        for child in ast.walk(node)
+        if child is not node and isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    if not nested_def_names:
         return False
 
-    # Check if any return statement returns a name (likely the nested function)
-    for child in ast.walk(node):
-        if isinstance(child, ast.Return) and child.value is not None:
-            if isinstance(child.value, ast.Name):
-                return True
+    for ret in _iter_own_returns(node):
+        if isinstance(ret.value, ast.Name) and ret.value.id in nested_def_names:
+            return True
     return False
 
 

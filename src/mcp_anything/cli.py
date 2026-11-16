@@ -387,9 +387,21 @@ def _run_domain_command(
     data_source = getattr(args, "data_source", None)
     name = getattr(args, "name", None)
 
-    # Derive server name from brief file stem if not provided
+    # Derive server name: explicit --name wins; otherwise prefer the brief's own
+    # `server_name` field (the customer-facing identity declared in the brief),
+    # falling back to the brief file stem only when the brief doesn't declare one.
     if not name and brief_file:
-        name = Path(brief_file).stem.replace("_", "-").replace(" ", "-")
+        brief_server_name = None
+        try:
+            raw_for_name = _yaml.safe_load(Path(brief_file).read_text())
+            if isinstance(raw_for_name, dict):
+                brief_server_name = raw_for_name.get("server_name")
+        except Exception:
+            brief_server_name = None
+        if brief_server_name:
+            name = str(brief_server_name).replace("_", "-").replace(" ", "-")
+        else:
+            name = Path(brief_file).stem.replace("_", "-").replace(" ", "-")
     if not name:
         name = "mcp-server"
 

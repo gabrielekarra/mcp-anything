@@ -6,6 +6,7 @@ quick_queries.json is the dual view of the eval set — one entry per domain bri
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -13,6 +14,45 @@ from mcp_anything.models.design import ServerDesign
 from mcp_anything.models.domain import DomainModel
 from mcp_anything.pipeline.context import PipelineContext
 from mcp_anything.pipeline.phase import Phase
+
+
+_STOPWORDS = {
+    "a", "an", "the", "to", "of", "in", "on", "for", "and", "or", "with", "by",
+    "is", "are", "this", "that", "it", "as", "be", "at", "from", "into", "their",
+}
+
+
+def _tokenize(text: str) -> set[str]:
+    """Lowercase word tokens, minus stopwords, for cheap keyword-overlap matching."""
+    return {w for w in re.findall(r"[a-z0-9]+", (text or "").lower()) if w not in _STOPWORDS}
+
+
+def _best_matching_tools(text: str, tools: list, top_n: int = 1) -> list:
+    """Rank tools by token overlap between `text` and each tool's name + description.
+
+    Returns an empty list when nothing overlaps — callers should show nothing
+    rather than guess a tool, so a --no-llm SKILL.md/quick_queries entry never
+    points an agent at a tool that has nothing to do with the use case.
+    """
+    query_words = _tokenize(text)
+    if not query_words or not tools:
+        return []
+    scored = []
+    for tool in tools:
+        tool_words = _tokenize(tool.name.replace("_", " ")) | _tokenize(tool.description)
+        score = len(query_words & tool_words)
+        if score > 0:
+            scored.append((score, tool))
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [t for _, t in scored[:top_n]]
+
+
+def _format_param(p) -> str:
+    """Render a parameter's type/default for the Tools section (e.g. `x` (number, default=0))."""
+    detail = p.type
+    if not p.required:
+        detail += f", default={p.default!r}" if p.default is not None else ", optional"
+    return f"`{p.name}` ({detail})"
 
 
 _SKILL_BUNDLE_SYSTEM = """\
@@ -79,13 +119,75 @@ how the agent should handle them.
 """
 
 
+def _build_recipe_workflows(domain_model: DomainModel, design: ServerDesign) -> str:
+    if not design.tools:
+        return "(No tools generated)"
+
+    blocks = []
+    for uc in domain_model.use_cases[:5]:
+        matches = _best_matching_tools(uc.description, design.tools, top_n=2)
+        if not matches:
+            continue
+        steps = "\n".join(
+            f"{i}. Call `{tool.name}` — {tool.description}"
+            for i, tool in enumerate(matches, start=1)
+        )
+        blocks.append(f"### {uc.id}: {uc.description}\n{steps}")
+
+    if not blocks:
+        return (
+            "(No tool name/description matched a documented use case closely enough "
+            "to suggest a recipe; see the Tools section above.)"
+        )
+    return "\n\n".join(blocks)
+
+
+def _build_gotchas(design: ServerDesign) -> str:
+    has_http_tools = any(t.impl.strategy == "http_call" for t in design.tools)
+    has_composed_tools = bool(design.composed_tools)
+
+    lines = [
+        "- Always check the response for error fields before proceeding.",
+        "- Pass `verbose=true` on any tool to get the full response payload; the "
+        "compact default may omit fields you need.",
+    ]
+    if has_http_tools:
+        lines.append(
+            "- HTTP-backed tools report their status code in the `verbose=true` "
+            "metadata; a non-2xx status means the call failed even if the body "
+            "looks well-formed."
+        )
+    if has_composed_tools:
+        lines.append(
+            "- Composed tools are preferred over manually chaining their "
+            "individual steps for multi-step workflows."
+        )
+    return "\n".join(lines)
+
+
+def _build_anti_patterns(design: ServerDesign) -> str:
+    has_manage_tools = any(t.name.startswith("manage_") for t in design.tools)
+
+    lines = []
+    if has_manage_tools:
+        lines.append(
+            "- Do not call individual CRUD tools in sequence when a grouped "
+            "`manage_*` tool exists."
+        )
+    lines.append("- Do not ignore the `verbose` parameter when you need metadata for debugging.")
+    lines.append("- Do not assume tools are idempotent unless their description says so.")
+    return "\n".join(lines)
+
+
 def _build_skill_fallback(domain_model: DomainModel, design: ServerDesign) -> str:
     tools_list = "\n".join(
         f"### `{t.name}`\n{t.description}\n\n**Parameters:** "
-        + ", ".join(f"`{p.name}` ({p.type})" for p in t.parameters if p.name != "verbose")
+        + (
+            ", ".join(_format_param(p) for p in t.parameters if p.name != "verbose")
+            or "(none)"
+        )
         for t in design.tools
-    )
-    use_cases = "\n".join(f"- {uc.description}" for uc in domain_model.use_cases)
+    ) or "(No tools generated)"
 
     return f"""# {design.server_name} — SKILL.md
 
@@ -100,39 +202,31 @@ This server exposes the following access patterns:
 {chr(10).join(f'- {p}' for p in domain_model.access_patterns) or '- See individual tools above.'}
 
 ## Gotchas
-- Always check the response for error fields before proceeding.
-- Pass `verbose=true` to get full response metadata including HTTP status codes.
-- Composed tools are preferred over manual chaining for multi-step workflows.
+{_build_gotchas(design)}
 
 ## Recipe Workflows
-{chr(10).join(f'### {uc.id}: {uc.description}' + chr(10) + f'1. Call `{design.tools[0].name}` if available.' for uc in domain_model.use_cases[:3]) if design.tools else '(No tools generated)'}
+{_build_recipe_workflows(domain_model, design)}
 
 ## Composed-Call Examples
 {chr(10).join(f'- **{ct.name}**: {ct.trigger_pattern}' for ct in design.composed_tools) or '(No composed tools defined)'}
 
 ## Anti-patterns
-- Do not call individual CRUD tools in sequence when a grouped `manage_*` tool exists.
-- Do not ignore the `verbose` parameter when you need metadata for debugging.
-- Do not assume tools are idempotent unless their description says so.
+{_build_anti_patterns(design)}
 """
 
 
 def _build_quick_queries(domain_model: DomainModel, design: ServerDesign) -> list[dict]:
-    """Build quick_queries.json from domain use-cases."""
+    """Build quick_queries.json from domain use-cases.
+
+    `expected_tool` is matched by token overlap between the use-case text and each
+    tool's name + description; it's left null when nothing overlaps rather than
+    guessing the first tool, since a wrong guess is worse than no suggestion.
+    """
     entries = []
-    tool_names = [t.name for t in design.tools]
 
     for uc in domain_model.use_cases:
-        # Best-effort: match use-case to a likely tool by keyword overlap
-        uc_words = set(uc.description.lower().split())
-        best_tool = tool_names[0] if tool_names else "unknown"
-        best_score = 0
-        for tool_name in tool_names:
-            tool_words = set(tool_name.replace("_", " ").lower().split())
-            score = len(uc_words & tool_words)
-            if score > best_score:
-                best_score = score
-                best_tool = tool_name
+        matches = _best_matching_tools(uc.description, design.tools, top_n=1)
+        best_tool = matches[0].name if matches else None
 
         entries.append({
             "id": f"qq-{uc.id}",
