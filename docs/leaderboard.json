@@ -1,0 +1,97 @@
+[
+  {
+    "name": "Filesystem (reference)",
+    "source": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+    "score": 96,
+    "grade": "A",
+    "tools": 16,
+    "tokens": 3548,
+    "top": "CRUD operations not grouped (-4.5)"
+  },
+  {
+    "name": "Memory (reference)",
+    "source": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
+    "score": 100,
+    "grade": "A",
+    "tools": 9,
+    "tokens": 2089,
+    "top": "none"
+  },
+  {
+    "name": "Everything (reference)",
+    "source": "https://github.com/modelcontextprotocol/servers/tree/main/src/everything",
+    "score": 100,
+    "grade": "A",
+    "tools": 16,
+    "tokens": 1942,
+    "top": "none"
+  },
+  {
+    "name": "Sequential thinking (reference)",
+    "source": "https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking",
+    "score": 97,
+    "grade": "A",
+    "tools": 1,
+    "tokens": 577,
+    "top": "Overlong descriptions (-3.0)"
+  },
+  {
+    "name": "Fetch (reference)",
+    "source": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
+    "score": 100,
+    "grade": "A",
+    "tools": 1,
+    "tokens": 353,
+    "top": "none"
+  },
+  {
+    "name": "Git (reference)",
+    "source": "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
+    "score": 70,
+    "grade": "C",
+    "tools": 14,
+    "tokens": 1643,
+    "top": "Undocumented parameters (-23.1)"
+  },
+  {
+    "name": "Time (reference)",
+    "source": "https://github.com/modelcontextprotocol/servers/tree/main/src/time",
+    "score": 100,
+    "grade": "A",
+    "tools": 3,
+    "tokens": 550,
+    "top": "none"
+  },
+  {
+    "name": "GitHub (official)",
+    "source": "https://github.com/github/github-mcp-server",
+    "error": "needs GITHUB_PERSONAL_ACCESS_TOKEN"
+  },
+  {
+    "name": "Playwright (Microsoft)",
+    "source": "https://github.com/microsoft/playwright-mcp",
+    "score": 93,
+    "grade": "A",
+    "tools": 25,
+    "tokens": 4829,
+    "top": "Vague descriptions (-6.0)"
+  },
+  {
+    "name": "Notion (official)",
+    "source": "https://github.com/makenotion/notion-mcp-server",
+    "score": 74,
+    "grade": "C",
+    "tools": 24,
+    "tokens": 20067,
+    "top": "Undocumented parameters (-17.7)"
+  },
+  {
+    "name": "Brave Search (official)",
+    "source": "https://github.com/brave/brave-search-mcp-server",
+    "score": 98,
+    "grade": "A",
+    "tools": 8,
+    "tokens": 8666,
+    "top": "Overlong descriptions (-1.5)"
+  }
+]
