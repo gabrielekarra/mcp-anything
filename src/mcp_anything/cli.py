@@ -2,8 +2,10 @@
 
 import argparse
 import asyncio
+import json
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -13,6 +15,7 @@ from rich.console import Console
 
 from mcp_anything import __version__
 from mcp_anything.config import CLIOptions
+from mcp_anything.install import CLIENTS
 from mcp_anything.llm import DEFAULT_MODEL, PROVIDERS
 
 
@@ -145,6 +148,8 @@ def build_parser() -> argparse.ArgumentParser:
     bld.add_argument("--ci", action="store_true", help="Hard-fail on coverage below threshold or parity divergence")
     bld.add_argument("--no-llm", action="store_true")
     _model_option(bld)
+    bld.add_argument("--install", action="append", choices=list(CLIENTS), default=[], metavar="CLIENT",
+                     help=f"Add the server to a client when done (repeatable): {', '.join(CLIENTS)}")
     bld.add_argument("-v", "--verbose", action="store_true")
     bld.add_argument(
         "--include",
@@ -193,6 +198,32 @@ def build_parser() -> argparse.ArgumentParser:
     srv.add_argument("--host", default="0.0.0.0", help="HTTP host (default: 0.0.0.0)")
     srv.add_argument("--port", type=int, default=8000, help="HTTP port (default: 8000)")
 
+    # quick — one command from a source to a server
+    qck = subparsers.add_parser(
+        "quick",
+        help="Build a server from a URL, a spec file or a code folder, with the brief drafted for you "
+        "(also: mcp-anything <source>)",
+    )
+    qck.add_argument("source", help="An API spec URL, a spec file (OpenAPI, GraphQL, .proto) or a code folder")
+    qck.add_argument("-o", "--output-dir", type=Path)
+    qck.add_argument("--name", help="Server name (default: from the spec title or folder)")
+    qck.add_argument("--target", choices=["fastmcp", "mcp-use"], default="fastmcp")
+    qck.add_argument("--install", action="append", choices=list(CLIENTS), default=[], metavar="CLIENT",
+                     help=f"Add the server to a client when done (repeatable): {', '.join(CLIENTS)}")
+    qck.add_argument("--no-llm", action="store_true", help="Draft the brief and design the tools without a model")
+    _model_option(qck)
+    qck.add_argument("-v", "--verbose", action="store_true")
+
+    # install — add a server to a client's configuration
+    ins = subparsers.add_parser("install", help=f"Add a server to an MCP client: {', '.join(CLIENTS)}")
+    ins.add_argument("server_dir", nargs="?", type=Path, help="A generated server folder")
+    ins.add_argument("--client", action="append", choices=list(CLIENTS), required=True,
+                     help="Which client (repeatable)")
+    ins.add_argument("--url", help="Install a server that is already running over HTTP, by URL")
+    ins.add_argument("--name", help="The name the server gets in the client (default: from the server)")
+    ins.add_argument("--print", dest="print_only", action="store_true", help="Show the entry instead of writing it")
+    ins.add_argument("--no-pip", action="store_true", help="Do not pip-install the server's package first")
+
     # grade
     grd = subparsers.add_parser(
         "grade",
@@ -207,6 +238,59 @@ def build_parser() -> argparse.ArgumentParser:
     grd.add_argument("--timeout", type=float, default=60, help="Seconds to wait for the server")
 
     return parser
+
+
+def _run_quick_command(args: argparse.Namespace, console: Console) -> None:
+    from mcp_anything import quick
+
+    try:
+        path, kind, name = quick.locate(args.source, console)
+    except (ValueError, RuntimeError) as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        sys.exit(1)
+    brief = quick.draft_brief(path, kind, args.name or name, use_model=not args.no_llm, console=console)
+    if args.name:
+        brief["server_name"] = args.name
+    brief["backend_target"] = args.target
+    output_dir = Path(args.output_dir or f"./mcp-{brief['server_name']}-server")
+    drafts = Path(tempfile.mkdtemp(prefix="mcp_brief_"))
+    brief_file = quick.write_brief(brief, drafts / f"{brief['server_name']}.yaml")
+    console.print(f"[dim]Drafted a brief with {len(brief['use_cases'])} use cases from {path.name}.[/dim]")
+    build_args = argparse.Namespace(
+        brief_file=brief_file, data_source=path if kind == "codebase" else None, name=brief["server_name"],
+        output_dir=output_dir, target=args.target, resume=False, no_llm=args.no_llm, verbose=args.verbose,
+        review=False, auto_approve=True, run_eval=False, eval_threshold=0.80, ci=False,
+        include=None, exclude=None, scope_file=None, install=args.install,
+    )
+    _run_domain_command(build_args, console, phases=None)
+    kept = quick.keep_brief(brief_file, output_dir)
+    console.print(
+        f"\n[bold]Server ready in {output_dir}[/bold]\n"
+        f"  Edit the brief and rebuild:  mcp-anything build --brief {kept} -o {output_dir}\n"
+        f"  Check its quality:           mcp-anything grade {output_dir}\n"
+        + ("" if args.install else f"  Add it to a client:          mcp-anything install {output_dir} --client claude-code\n")
+    )
+
+
+def _install_into_clients(server_dir: Optional[Path], clients: list[str], console: Console, *, url=None, name=None,
+                          print_only=False, pip=True) -> None:
+    from mcp_anything import install
+
+    try:
+        launch = {"url": url} if url else install.launch(Path(server_dir), pip=pip and not print_only)
+    except (ValueError, subprocess.CalledProcessError) as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        sys.exit(1)
+    name = name or (install.server_name(Path(server_dir)) if server_dir else "mcp-server")
+    for client in clients:
+        path, entry, changed = install.install(client, name, launch, write=not print_only)
+        if print_only:
+            key = "servers" if client == "vscode" else "mcpServers"
+            print(json.dumps({key: {name: entry}}, indent=2))
+        elif changed:
+            console.print(f"Added [bold]{name}[/bold] to {client} ({path}). Restart the client to use it.")
+        else:
+            console.print(f"{name} is already in {client} ({path}).")
 
 
 def _run_grade_command(args: argparse.Namespace, console: Console) -> None:
@@ -332,6 +416,8 @@ def _run_domain_command(
 
     engine = PipelineEngine(options, console)
     asyncio.run(engine.run_domain())
+    if getattr(args, "install", None):
+        _install_into_clients(Path(output_dir), args.install, console)
 
 
 def _run_validate_command(args: argparse.Namespace, console: Console) -> None:
@@ -394,8 +480,15 @@ def _run_validate_command(args: argparse.Namespace, console: Console) -> None:
             sys.exit(1)
 
 
+COMMANDS = {"generate", "analyze", "design", "model", "build", "validate", "status", "serve", "quick", "install", "grade",
+            "eval"}
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     parser = build_parser()
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv and argv[0] not in COMMANDS and not argv[0].startswith("-"):
+        argv = ["quick", *argv]  # mcp-anything <source>
     args = parser.parse_args(argv)
     console = Console()
 
@@ -414,6 +507,18 @@ def main(argv: Optional[list[str]] = None) -> None:
 
     if args.command == "grade":
         _run_grade_command(args, console)
+        return
+
+    if args.command == "quick":
+        _run_quick_command(args, console)
+        return
+
+    if args.command == "install":
+        if not args.server_dir and not args.url:
+            console.print("[red]Error:[/red] give a server folder or --url")
+            sys.exit(2)
+        _install_into_clients(args.server_dir, args.client, console, url=args.url, name=args.name,
+                              print_only=args.print_only, pip=not args.no_pip)
         return
 
     if args.command == "status":
